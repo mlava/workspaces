@@ -6,12 +6,14 @@ Create as many workspaces as you like. If you have only one, a button will appea
 
 Once installed, this extension creates a page in your graph called 'Workspaces configuration' and will automatically navigate there. A dummy workspace definition is supplied which demonstrates the required format.
 
-Configuration is simple. In the block indented under Left Sidebar: type either open or closed. Same for Right Sidebar:.
+Configuration is simple. Open the page you want in the main window, and whatever content you want in the right sidebar. Open or close the left and right sidebars as you prefer. Now, trigger the Command Palette command 'Create Workspace from current state' to create a new Workspace definition on your 'Workspaces configuration' page.
 
-For the Main Window: option, place a page uid in the indented block. For any pages or blocks you want in the right sidebar, create a comma-separated list of uids in the correct spot.
+You can also configure things manually (although why would you?):
+- In the block indented under Left Sidebar: type either open or closed. Same for Right Sidebar:.
+- For the Main Window: option, place a page uid in the indented block.
+- For any pages or blocks you want in the right sidebar, create a list of uids, with each one on a new row.
 
 You will need to reload the extension to apply these changes, however a way to do this automatically is on the TODO list.
 
 TODO:
 1. apply changes to workspace definitions without reloading the extension
-2. Command Palette command to save the current state to a new workspace definition
