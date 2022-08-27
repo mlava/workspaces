@@ -13,6 +13,6 @@
     "webpack-cli": "^4.10.0"
   },
   "dependencies": {
-    "@omiu/dialog-extention": "0.0.8"
+    "izitoast": "^1.4.0"
   }
 }
