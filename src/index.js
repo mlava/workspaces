@@ -1,4 +1,4 @@
-import '@omiu/dialog-extention';
+import iziToast from "izitoast";
 
 export default {
     onload: ({ extensionAPI }) => {
@@ -77,40 +77,74 @@ async function createWorkspace() {
         }
     }
 
-    Omiu.prompt({
-        msg: 'What do you want to call this Workspace?',
-        title: 'Workspaces',
-        cancelButtonText: 'Cancel',
-        confirmButtonText: 'OK',
-        onCancel: function () {
-            alert("You cancelled the search")
-        },
-        onConfirm: async function (val) {
-            var workspaceName = val;
-            // write new workspace definition to Workspaces configuration page
-            let parentUID = definitions.uid;
-            let order = 1 + (definitions.children.length);
-            let secHeaderUID = await createBlock(workspaceName, parentUID, order);
-            let ws_3 = "Left Sidebar:";
-            let ws_3v = await createBlock(ws_3, secHeaderUID, 0);
-            await createBlock(leftSidebarState, ws_3v, 1);
-            let ws_4 = "Right Sidebar:";
-            let ws_4v = await createBlock(ws_4, secHeaderUID, 1);
-            await createBlock(rightSidebarState, ws_4v, 1);
-            let ws_5 = "Main Content:";
-            let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
-            await createBlock(thisPage, ws_5v, 1);
-            let ws_6 = "Right Sidebar Content:";
-            let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
-            if (RSWList.length > 0) {
-                for (var i = 0; i < RSWList.length; i++) {
-                    await createBlock("" + RSWList[i].uid + "," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
-                }
-            }
-
-            checkWorkspaces();
-        }
+    iziToast.question({
+        color: "blue",
+        layout: 2,
+        drag: false,
+        timeout: 100000,
+        close: false,
+        overlay: true,
+        displayMode: 2,
+        id: "question",
+        title: "Workspaces",
+        message:
+            "What do you want to call this Workspace?",
+        position: "center",
+        inputs: [
+            [
+                '<input type="text" placeholder="">',
+                "keyup",
+                function (instance, toast, input, e) {
+                    //console.info(input.value);
+                },
+                true,
+            ],
+        ],
+        buttons: [
+            [
+                "<button><b>Confirm</b></button>",
+                function (instance, toast, button, e, inputs) {
+                    writeNewWS(inputs[0].value);
+                    instance.hide({ transitionOut: "fadeOut" }, toast, "button");
+                },
+                false,
+            ],
+            [
+                "<button>Cancel</button>",
+                function (instance, toast, button, e) {
+                    instance.hide({ transitionOut: "fadeOut" }, toast, "button");
+                },
+            ],
+        ],
+        onClosing: function (instance, toast, closedBy) { },
+        onClosed: function (instance, toast, closedBy) { },
     });
+
+    async function writeNewWS(val) {
+        var workspaceName = val;
+        // write new workspace definition to Workspaces configuration page
+        let parentUID = definitions.uid;
+        let order = 1 + (definitions.children.length);
+        let secHeaderUID = await createBlock(workspaceName, parentUID, order);
+        let ws_3 = "Left Sidebar:";
+        let ws_3v = await createBlock(ws_3, secHeaderUID, 0);
+        await createBlock(leftSidebarState, ws_3v, 1);
+        let ws_4 = "Right Sidebar:";
+        let ws_4v = await createBlock(ws_4, secHeaderUID, 1);
+        await createBlock(rightSidebarState, ws_4v, 1);
+        let ws_5 = "Main Content:";
+        let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
+        await createBlock(thisPage, ws_5v, 1);
+        let ws_6 = "Right Sidebar Content:";
+        let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
+        if (RSWList.length > 0) {
+            for (var i = 0; i < RSWList.length; i++) {
+                await createBlock("" + RSWList[i].uid + "," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+            }
+        }
+
+        checkWorkspaces();
+    }
 }
 
 async function checkFirstRun() {
