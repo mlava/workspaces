@@ -1,0 +1,24 @@
+.flex-container {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: stretch;
+  align-content: center;
+}
+
+.flex-items {
+  display: inline;
+  flex-grow: 0;
+  flex-shrink: 1;
+  flex-basis: auto;
+  align-self: auto;
+  order: 0;
+  cursor: pointer;
+}
+
+.flex-items:hover {
+  background: rgba(167, 182, 194, 0.3);
+  color: #182026;
+  text-decoration: none;
+}
