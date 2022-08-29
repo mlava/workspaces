@@ -270,14 +270,13 @@ async function checkWorkspaces() {
                 div.id = "workspacesSelect";
                 var span = document.createElement('span');
                 span.classList.add('bp3-button', 'bp3-minimal', 'bp3-small', 'bp3-icon-folder-shared-open');
-                var selectString = "<select name=\"workspacesSelect\" id=\"workspacesSelectMenu\">"
+                var selectString = "<select name=\"workspacesSelectMenu\" id=\"workspacesSelectMenu\"><option value=\"null\">Select...</option>";
                 for (i = 0; i < definitions.children.length; i++) {
                     selectString += "<option value=\"" + definitions.children[i].string + "\">" + definitions.children[i].string + "</option>";
                 }
                 selectString += "</select>";
                 span.innerHTML = selectString;
-                span.onchange =
-                    div.append(span);
+                div.append(span);
                 divParent.append(div);
 
                 var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
@@ -287,7 +286,9 @@ async function checkWorkspaces() {
                     topBarRow.parentNode.insertBefore(divParent, topBarRow);
                 }
                 document.getElementById("workspacesSelectMenu").addEventListener("change", () => {
-                    gotoWorkspace(document.getElementById("workspacesSelectMenu").value);
+                    if (document.getElementById("workspacesSelectMenu").value != "null") {
+                        gotoWorkspace(document.getElementById("workspacesSelectMenu").value);
+                    }
                 });
             }
         }
@@ -322,6 +323,7 @@ async function checkWorkspaces() {
 }
 
 async function gotoWorkspace(workspace) {
+    checkWorkspaces();
     let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
     let q = `[:find (pull ?page [:node/title :block/string :block/uid {:block/children ...} ]) :where [?page :block/uid "${pageUID}"]  ]`;
     var results = await window.roamAlphaAPI.q(q);
