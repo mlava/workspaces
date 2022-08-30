@@ -365,7 +365,7 @@ async function gotoWorkspace(workspace) {
                 }
             }
         }
-        console.info(leftSidebar, rightSidebar, mainString, rightSidebarContent);
+        //console.info(leftSidebar, rightSidebar, mainString, rightSidebarContent);
     }
 
     var leftSidebarState;
@@ -393,8 +393,23 @@ async function gotoWorkspace(workspace) {
         await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: mainString } });
     }
 
-    // get any pre-existing right sidebar content to keep for later, before we add new blocks
+    // remove any pre-existing right sidebar content
     let rightSidebarWindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
+    //console.info(rightSidebarWindows);
+    if (rightSidebarWindows.length > 0) {
+        for (var i = 0; i < rightSidebarWindows.length; i++) {
+            window.roamAlphaAPI.ui.rightSidebar.removeWindow(
+                {
+                    "window":
+                    {
+                        "type": rightSidebarWindows[i]['type'],
+                        "block-uid": rightSidebarWindows[i]['block-uid'] || rightSidebarWindows[i]['page-uid'] || rightSidebarWindows[i]['mentions-uid']
+                    }
+                }
+            ) // thanks to Matt Vogel and his Clear Right Sidebar extension as I couldn't quite get this to work as intended until looking at his code
+        }
+    }
+
     // get and create new right sidebar content
     var descriptors = [];
     if (rightSidebarContent != undefined) {
@@ -425,21 +440,13 @@ async function gotoWorkspace(workspace) {
             }
         }
     }
-    // remove the pre-existing content
-    if (rightSidebarWindows.length > 0) {
-        for (var i = 0; i < rightSidebarWindows.length; i++) {
-            await window.roamAlphaAPI.ui.rightSidebar.removeWindow({ "window": { "type": rightSidebarWindows[i]['type'], "block-uid": rightSidebarWindows[i]['block-uid'] || rightSidebarWindows[i]['page-uid'] || rightSidebarWindows[i]['mentions-uid'] } })
-        }
-    }
 
     // set right sidebar open state
-    console.info(rightSidebar);
+    //console.info(rightSidebar);
     if (rightSidebar != undefined) {
         if (rightSidebar == "closed") {
-            console.info("closing RSB");
             await roamAlphaAPI.ui.rightSidebar.close();
         } else if (rightSidebar == "open") {
-            console.info("opening RSB");
             await roamAlphaAPI.ui.rightSidebar.open();
         }
     }
