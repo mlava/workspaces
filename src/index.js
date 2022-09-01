@@ -1,7 +1,9 @@
-import iziToast from "izitoast";
+//import iziToast from "izitoast";
 let keyEventHandler = undefined;
 var boundKEH = undefined;
+var keyUpEH = undefined;
 var definitions = [];
+var keyDownTrack = false;
 
 export default {
     onload: ({ extensionAPI }) => {
@@ -22,37 +24,54 @@ export default {
             document.getElementById("workspaces").remove();
         }
         window.removeEventListener('keydown', boundKEH);
+        window.removeEventListener('keyup', keyUpEH);
     }
 }
 
-async function getKBShortcuts() {
-    let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
-    let q = `[:find (pull ?page [:node/title :block/string :block/uid {:block/children ...} ]) :where [?page :block/uid "${pageUID}"]  ]`;
-    var results = await window.roamAlphaAPI.q(q);
-
-    if (results[0][0]?.children.length > 0) {
-        for (var i = 0; i < results[0][0].children.length; i++) {
-            if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
-                for (var j = 0; j < results[0][0].children[i]?.children.length; j++) {
-                    definitions.push({ "name": results[0][0]?.children[i]?.children[j]?.string, "kbshortcut": results[0][0]?.children[i]?.children[j]?.children[4]?.children[0]?.string });
-                }
-            }
-        }
+async function checkFirstRun() {
+    var page = await window.roamAlphaAPI.q(`
+    [:find ?e
+        :where [?e :node/title "Workspaces configuration"]]`);
+    if (page.length > 0) { // the page already exists
+        return;
+    } else { // no workspaces page created, so create one
+        let newUid = roamAlphaAPI.util.generateUID();
+        await window.roamAlphaAPI.createPage({ page: { title: "Workspaces configuration", uid: newUid } });
+        let string1 = "Thank you for installing the Workspaces extension for Roam Research. This page has been automatically generated to allow configuration of your workspaces.";
+        await createBlock(string1, newUid, 0);
+        let string2 = "Below the horizontal line is where you can define workspaces. You will see a variety of options that are required for each workspace definition. A dummy template is provided for reference.";
+        await createBlock(string2, newUid, 1);
+        let string3 = "This short video will walk you through configuration of your first workspace. You could do this manually, but it is easier to just set up your workspace as you like it and then use the Command Palette 'Create Workspace from current state' command.";
+        await createBlock(string3, newUid, 2);
+        let string3a = "{{video:https://www.loom.com/share/4ca0dd72a0fa4c46b012a59717e503d7}}";
+        await createBlock(string3a, newUid, 3);
+        let string4 = "The first two options take either open or closed. The third (Main Content) requires the page uid (9 alphanumeric digit string at end of the url) or a Roam link to the [[page]]. The final takes a list of page or block uids, each on their own row, or a list of [[page]] references on their own row. These will each be opened in the right sidebar.";
+        await createBlock(string4, newUid, 4);
+        let string5 = "The final option allows you to define a keyboard shortcut to automatically navigate to your workspace. The shortcut will be SHIFT + ALT + a letter of your choice. Type a single lowercase letter in the space provided. Please note that not all letters will work as some are reserved for use by the browser or other functions. It might require some experimentation to find the right key to use!";
+        await createBlock(string5, newUid, 5);
+        await createBlock("---", newUid, 6);
+        let ws_1 = "Workspace Definitions:";
+        let headerUID = await createBlock(ws_1, newUid, 7);
+        let ws_2 = "Dummy";
+        let secHeaderUID = await createBlock(ws_2, headerUID, 0);
+        let ws_3 = "Left Sidebar:";
+        let ws_3v = await createBlock(ws_3, secHeaderUID, 0);
+        await createBlock("__open or closed__", ws_3v, 1);
+        let ws_4 = "Right Sidebar:";
+        let ws_4v = await createBlock(ws_4, secHeaderUID, 1);
+        await createBlock("__open or closed__", ws_4v, 1);
+        let ws_5 = "Main Content:";
+        let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
+        await createBlock("__add a [[ page link here__", ws_5v, 1);
+        let ws_6 = "Right Sidebar Content:";
+        let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
+        await createBlock("__add a [[ page link here__", ws_6v, 1);
+        await createBlock("__or a (( blockref here__", ws_6v, 2);
+        let ws_7 = "Keyboard Shortcut:";
+        let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
+        await createBlock("__type one letter here__", ws_7v, 1);
+        await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: newUid } });
     }
-
-    keyEventHandler = function (definitions, e) {
-        let eventKey = e.key.toLowerCase();
-        let eventShift = e.shiftKey;
-        let eventAlt = e.altKey;
-        for (var i = 0; i < definitions.length; i++) {
-            if (eventKey == definitions[i].kbshortcut && eventShift && eventAlt) {
-                gotoWorkspace(definitions[i].name);
-            }
-        }
-    }
-
-    boundKEH = keyEventHandler.bind(null, definitions);
-    window.addEventListener('keydown', boundKEH);
 }
 
 async function createWorkspace() {
@@ -81,6 +100,8 @@ async function createWorkspace() {
             thisPage = mm + '-' + dd + '-' + yyyy;
         }
     }
+    var pageName = undefined;
+    pageName = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${thisPage}"] [?b :node/title ?title]]`);
 
     var RSwindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
     if (RSwindows) {
@@ -98,16 +119,11 @@ async function createWorkspace() {
 
     // get Workspaces configuration page and find the spot to write new config 
     let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
-
-    let q = `[:find (pull ?page
-        [:node/title :block/string :block/uid {:block/children ...}
-        ])
-     :where [?page :block/uid "${pageUID}"]  ]`;
-    var results = await window.roamAlphaAPI.q(q);
+    let results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid {:block/children ...} ]) :where [?page :block/uid "${pageUID}"] ]`);
     if (results[0][0]?.children.length > 0) {
         for (var i = 0; i < results[0][0]?.children.length; i++) {
             if (results[0][0]?.children[i].string.startsWith("Workspace Definitions:")) {
-                var definitions = results[0][0]?.children[i]
+                var definitions = results[0][0]?.children[i];
             }
         }
     }
@@ -164,7 +180,12 @@ async function createWorkspace() {
     async function writeNewWS(val, valKb) {
         // write new workspace definition to Workspaces configuration page
         let parentUID = definitions.uid;
-        let order = 1 + (definitions.children.length);
+        var order;
+        if (definitions.hasOwnProperty("children")) {
+            order = 1 + (definitions.children.length);
+        } else {
+            order = 1;
+        }
         let secHeaderUID = await createBlock(val, parentUID, order);
         let ws_3 = "Left Sidebar:";
         let ws_3v = await createBlock(ws_3, secHeaderUID, 0);
@@ -174,12 +195,21 @@ async function createWorkspace() {
         await createBlock(rightSidebarState, ws_4v, 1);
         let ws_5 = "Main Content:";
         let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
-        await createBlock(thisPage, ws_5v, 1);
+        if (pageName != undefined) {
+            await createBlock("[[" + pageName + "]]", ws_5v, 1);
+        } else {
+            await createBlock(thisPage, ws_5v, 1);
+        }
         let ws_6 = "Right Sidebar Content:";
         let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
         if (RSWList.length > 0) {
             for (var i = 0; i < RSWList.length; i++) {
-                await createBlock("" + RSWList[i].uid + "," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                if (RSWList[i].type == "outline") {
+                    var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`);
+                    await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                } else {
+                    await createBlock("((" + RSWList[i].uid + "))," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                }
             }
         }
         let ws_7 = "Keyboard Shortcut:";
@@ -190,58 +220,9 @@ async function createWorkspace() {
     }
 }
 
-async function checkFirstRun() {
-    var page = await window.roamAlphaAPI.q(`
-    [:find ?e
-        :where [?e :node/title "Workspaces configuration"]]`);
-    if (page.length > 0) { // the page already exists
-        return;
-    } else { // no workspaces page created, so create one
-        let newUid = roamAlphaAPI.util.generateUID();
-        await window.roamAlphaAPI.createPage({ page: { title: "Workspaces configuration", uid: newUid } });
-        let string1 = "Thank you for installing the Workspaces extension for Roam Research. This page has been automatically generated to allow configuration of your workspaces.";
-        await createBlock(string1, newUid, 0);
-        let string2 = "Below the  horizontal line is where you can define workspaces. You will see a variety of options that are required for each workspace definition. A dummy template is also provided for reference (which will not be used as a workspace).";
-        await createBlock(string2, newUid, 1);
-        let string3 = "This short video will walk you through configuration of your first workspace.";
-        await createBlock(string3, newUid, 2);
-        let string3a = "{{video:https://www.loom.com/share/4ca0dd72a0fa4c46b012a59717e503d7}}";
-        await createBlock(string3a, newUid, 3);
-        let string4 = "The first two options take either open or closed. The third (Main Content) requires the page uid (9 alphanumeric digit string at end of the url). The final takes a list of page or block uids, separated by a comma. These will each be opened in the right sidebar.";
-        await createBlock(string4, newUid, 4);
-        let string5 = "The final option allows you to define a keyboard shortcut to automatically navigate to your workspace. The shortcut will be SHIFT + ALT + a letter of your choice. Type a single lowercase letter in the space provided.";
-        await createBlock(string5, newUid, 5);
-        await createBlock("---", newUid, 6);
-        let ws_1 = "Workspace Definitions:";
-        let headerUID = await createBlock(ws_1, newUid, 7);
-        let ws_2 = "Dummy";
-        let secHeaderUID = await createBlock(ws_2, headerUID, 0);
-        let ws_3 = "Left Sidebar:";
-        let ws_3v = await createBlock(ws_3, secHeaderUID, 0);
-        await createBlock("open", ws_3v, 1);
-        let ws_4 = "Right Sidebar:";
-        let ws_4v = await createBlock(ws_4, secHeaderUID, 1);
-        await createBlock("open", ws_4v, 1);
-        let ws_5 = "Main Content:";
-        let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
-        await createBlock("", ws_5v, 1);
-        let ws_6 = "Right Sidebar Content:";
-        let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
-        await createBlock("", ws_6v, 1);
-        let ws_7 = "Keyboard Shortcut:";
-        let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
-        await createBlock("", ws_7v, 1);
-        await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: newUid } });
-    }
-}
-
 async function checkWorkspaces() {
     let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
-    let q = `[:find (pull ?page
-        [:node/title :block/string :block/uid {:block/children ...}
-        ])
-     :where [?page :block/uid "${pageUID}"]  ]`;
-    var results = await window.roamAlphaAPI.q(q);
+    var results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid {:block/children ...} ]) :where [?page :block/uid "${pageUID}"] ]`);
     if (results[0][0]?.children.length > 0) {
         for (var i = 0; i < results[0][0].children.length; i++) {
             if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
@@ -250,12 +231,12 @@ async function checkWorkspaces() {
         }
     }
 
-    //destroy the rm.topbar div
+    // destroy the rm.topbar div
     if (document.getElementById("workspaces")) {
         document.getElementById("workspaces").remove();
     }
 
-    //create the rm.topbar div
+    // create the rm.topbar div
     if (definitions?.children.length > 1) {
         for (var i = 0; i < definitions?.children.length; i++) {
             if (!document.getElementById('workspaces')) {
@@ -322,8 +303,43 @@ async function checkWorkspaces() {
     }
 }
 
+async function getKBShortcuts() {
+    let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
+    let results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid {:block/children ...} ]) :where [?page :block/uid "${pageUID}"]  ]`);
+
+    if (results[0][0]?.children.length > 0) {
+        for (var i = 0; i < results[0][0].children.length; i++) {
+            if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
+                for (var j = 0; j < results[0][0].children[i]?.children.length; j++) {
+                    definitions.push({ "name": results[0][0]?.children[i]?.children[j]?.string, "kbshortcut": results[0][0]?.children[i]?.children[j]?.children[4]?.children[0]?.string });
+                }
+            }
+        }
+    }
+
+    keyEventHandler = function (definitions, e) {
+        if (keyDownTrack == false) {
+            let eventKey = e.key.toLowerCase();
+            let eventShift = e.shiftKey;
+            let eventAlt = e.altKey;
+            for (var i = 0; i < definitions.length; i++) {
+                if (eventKey == definitions[i].kbshortcut && eventShift && eventAlt) {
+                    keyDownTrack = true;
+                    gotoWorkspace(definitions[i].name);
+                }
+            }
+        }
+    }
+    boundKEH = keyEventHandler.bind(null, definitions);
+
+    keyUpEH = function () {
+        keyDownTrack = false;
+    }
+    window.addEventListener('keydown', boundKEH);
+    window.addEventListener('keyup', keyUpEH);
+}
+
 async function gotoWorkspace(workspace) {
-    checkWorkspaces();
     let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
     let q = `[:find (pull ?page [:node/title :block/string :block/uid {:block/children ...} ]) :where [?page :block/uid "${pageUID}"]  ]`;
     var results = await window.roamAlphaAPI.q(q);
@@ -365,7 +381,6 @@ async function gotoWorkspace(workspace) {
                 }
             }
         }
-        //console.info(leftSidebar, rightSidebar, mainString, rightSidebarContent);
     }
 
     var leftSidebarState;
@@ -389,13 +404,19 @@ async function gotoWorkspace(workspace) {
         if (mainString.startsWith("((")) {
             mainString = mainString.slice(2, mainString.length);
             mainString = mainString.slice(0, -2);
+            await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: mainString } });
+        } else if (mainString.startsWith("[[")) { // this is a page name not a uid
+            mainString = mainString.slice(2, mainString.length);
+            mainString = mainString.slice(0, -2);
+            let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "${mainString}"][?e :block/uid ?uid ] ]`);
+            await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: pageUID[0][0].toString() } });
+        } else {
+            await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: mainString } });
         }
-        await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: mainString } });
     }
 
     // remove any pre-existing right sidebar content
     let rightSidebarWindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
-    //console.info(rightSidebarWindows);
     if (rightSidebarWindows.length > 0) {
         for (var i = 0; i < rightSidebarWindows.length; i++) {
             window.roamAlphaAPI.ui.rightSidebar.removeWindow(
@@ -406,7 +427,7 @@ async function gotoWorkspace(workspace) {
                         "block-uid": rightSidebarWindows[i]['block-uid'] || rightSidebarWindows[i]['page-uid'] || rightSidebarWindows[i]['mentions-uid']
                     }
                 }
-            ) // thanks to Matt Vogel and his Clear Right Sidebar extension as I couldn't quite get this to work as intended until looking at his code
+            ) // thanks to Matt Vogel and his Clear Right Sidebar extension as I couldn't quite get this to work as intended until looking at his code - used with permission
         }
     }
 
@@ -417,6 +438,7 @@ async function gotoWorkspace(workspace) {
             if (rightSidebarContent[j]?.string.length > 0) {
                 descriptors[j] = rightSidebarContent[j]?.string.split(",");
                 var thisNewUid = descriptors[j][0]?.trim();
+
                 // handle missing definitions for mode and collapsed state
                 var thisNewState = descriptors[j][1]?.trim();
                 if (thisNewState == null) {
@@ -430,19 +452,22 @@ async function gotoWorkspace(workspace) {
                 if (thisNewUid.startsWith("((")) {
                     thisNewUid = thisNewUid.slice(2, thisNewUid.length);
                     thisNewUid = thisNewUid.slice(0, -2);
+                } else if (thisNewUid.startsWith("[[")) { // this is a page name not a uid
+                    thisNewUid = thisNewUid.slice(2, thisNewUid.length);
+                    thisNewUid = thisNewUid.slice(0, -2);
+                    var newPage = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "${thisNewUid}"][?e :block/uid ?uid ] ]`);
+                    thisNewUid = newPage[0][0].toString();
                 }
                 // set right sidebar content
                 await window.roamAlphaAPI.ui.rightSidebar.addWindow({ window: { type: thisNewState, 'block-uid': thisNewUid, order: j } });
                 if (thisNewCollapsed == "true") {
                     await window.roamAlphaAPI.ui.rightSidebar.collapseWindow({ window: { type: thisNewState, 'block-uid': thisNewUid } });
                 }
-
             }
         }
     }
 
     // set right sidebar open state
-    //console.info(rightSidebar);
     if (rightSidebar != undefined) {
         if (rightSidebar == "closed") {
             await roamAlphaAPI.ui.rightSidebar.close();
@@ -450,6 +475,7 @@ async function gotoWorkspace(workspace) {
             await roamAlphaAPI.ui.rightSidebar.open();
         }
     }
+    checkWorkspaces();
 }
 
 async function createBlock(string, uid, order) {
@@ -460,4 +486,8 @@ async function createBlock(string, uid, order) {
             block: { string: string.toString(), uid: newUid }
         });
     return newUid;
+}
+
+async function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
