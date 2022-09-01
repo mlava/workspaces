@@ -1,4 +1,4 @@
-//import iziToast from "izitoast";
+import iziToast from "izitoast";
 let keyEventHandler = undefined;
 var boundKEH = undefined;
 var keyUpEH = undefined;
@@ -45,7 +45,7 @@ async function checkFirstRun() {
         await createBlock(string3, newUid, 2);
         let string3a = "{{video:https://www.loom.com/share/4ca0dd72a0fa4c46b012a59717e503d7}}";
         await createBlock(string3a, newUid, 3);
-        let string4 = "The first two options take either open or closed. The third (Main Content) requires the page uid (9 alphanumeric digit string at end of the url) or a Roam link to the [[page]]. The final takes a list of page or block uids, each on their own row, or a list of [[page]] references on their own row. These will each be opened in the right sidebar.";
+        let string4 = "The first two options take either open or closed. The third (Main Content) requires the page uid (9 alphanumeric digit string at end of the url) or a Roam link to the [[page]]. You could also simply put DNP if you want the Workspace to open to whichever daily note page is appropriate for that day. The final takes a list of page or block uids, each on their own row, or a list of [[page]] references on their own row. These will each be opened in the right sidebar.";
         await createBlock(string4, newUid, 4);
         let string5 = "The final option allows you to define a keyboard shortcut to automatically navigate to your workspace. The shortcut will be SHIFT + ALT + a letter of your choice. Type a single lowercase letter in the space provided. Please note that not all letters will work as some are reserved for use by the browser or other functions. It might require some experimentation to find the right key to use!";
         await createBlock(string5, newUid, 5);
@@ -62,7 +62,7 @@ async function checkFirstRun() {
         await createBlock("__open or closed__", ws_4v, 1);
         let ws_5 = "Main Content:";
         let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
-        await createBlock("__add a [[ page link here__", ws_5v, 1);
+        await createBlock("__add a [[ page link here, or DNP to open that day's daily note page__", ws_5v, 1);
         let ws_6 = "Right Sidebar Content:";
         let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
         await createBlock("__add a [[ page link here__", ws_6v, 1);
@@ -93,11 +93,7 @@ async function createWorkspace() {
         var uri = window.location.href;
         const regex = /^https:\/\/roamresearch.com\/#\/(app|offline)\/\w+$/; //today's DNP
         if (uri.match(regex)) { // this is Daily Notes for today
-            var today = new Date();
-            var dd = String(today.getDate()).padStart(2, '0');
-            var mm = String(today.getMonth() + 1).padStart(2, '0');
-            var yyyy = today.getFullYear();
-            thisPage = mm + '-' + dd + '-' + yyyy;
+            thisPage = "DNP";
         }
     }
     var pageName = undefined;
@@ -195,7 +191,7 @@ async function createWorkspace() {
         await createBlock(rightSidebarState, ws_4v, 1);
         let ws_5 = "Main Content:";
         let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
-        if (pageName != undefined) {
+        if (pageName != undefined && pageName.length > 0) {
             await createBlock("[[" + pageName + "]]", ws_5v, 1);
         } else {
             await createBlock(thisPage, ws_5v, 1);
@@ -401,7 +397,14 @@ async function gotoWorkspace(workspace) {
 
     // set main window content
     if (mainString != undefined) {
-        if (mainString.startsWith("((")) {
+        if (mainString.trim() == "DNP") {
+            var today = new Date();
+            var dd = String(today.getDate()).padStart(2, '0');
+            var mm = String(today.getMonth() + 1).padStart(2, '0');
+            var yyyy = today.getFullYear();
+            var dateUID = mm + '-' + dd + '-' + yyyy;
+            await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: dateUID } });
+        } else if (mainString.startsWith("((")) {
             mainString = mainString.slice(2, mainString.length);
             mainString = mainString.slice(0, -2);
             await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: mainString } });
@@ -486,8 +489,4 @@ async function createBlock(string, uid, order) {
             block: { string: string.toString(), uid: newUid }
         });
     return newUid;
-}
-
-async function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
 }
