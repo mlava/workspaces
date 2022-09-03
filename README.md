@@ -14,8 +14,9 @@ Configuration is simple. Open the page you want in the main window, and whatever
 
 You can also configure things manually (although why would you?):
 - In the block indented under Left Sidebar: type either open or closed. Same for Right Sidebar:.
-- For the Main Window: option, place a page uid in the indented block.
-- For any pages or blocks you want in the right sidebar, create a list of uids, with each one on a new row.
+- For the Main Window: option, place a page uid or [[page]] reference in the indented block.
+- Place any [[pages]] or ((blocks)) you want in the right sidebar, with each one on a new row.
+- Special cases: you could simply put DNP in the Main Window option and the workspace will automatically determine and open the correct daily note. You can use DNP+x or DNP-x in the Right Sidebar section, where x is an integer. This will open the page for tomorrow (DNP+1), yesterday (DNP-1) or even one year ago (DNP-365).
 
 You will need to reload the extension to apply these changes, however a way to do this automatically is on the TODO list.
 
