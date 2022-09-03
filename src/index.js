@@ -45,13 +45,15 @@ async function checkFirstRun() {
         await createBlock(string3, newUid, 2);
         let string3a = "{{video:https://www.loom.com/share/4ca0dd72a0fa4c46b012a59717e503d7}}";
         await createBlock(string3a, newUid, 3);
-        let string4 = "The first two options take either open or closed. The third (Main Content) requires the page uid (9 alphanumeric digit string at end of the url) or a Roam link to the [[page]]. You could also simply put DNP if you want the Workspace to open to whichever daily note page is appropriate for that day. The final takes a list of page or block uids, each on their own row, or a list of [[page]] references on their own row. These will each be opened in the right sidebar.";
+        let string4 = "The first two options take either open or closed. The third (Main Content) requires the page uid (9 alphanumeric digit string at end of the url) or a Roam link to the [[page]]. You could also simply put DNP if you want the Workspace to open to whichever daily note page is appropriate for that day. The fourth option takes a list of page or block uids, each on their own row, or a list of [[page]] references on their own row. These will each be opened in the right sidebar.";
         await createBlock(string4, newUid, 4);
-        let string5 = "The final option allows you to define a keyboard shortcut to automatically navigate to your workspace. The shortcut will be SHIFT + ALT + a letter of your choice. Type a single lowercase letter in the space provided. Please note that not all letters will work as some are reserved for use by the browser or other functions. It might require some experimentation to find the right key to use!";
+        let string5 = "A special use case would be to have multiple daily note pages as part of a workspace: you could have the DNP for today in the main content area and both yesterday and tomorrow's DNP in the right sidebar. For today use the code DNP, yesterday use DNP-1 and tomorrow use DNP+1. The dates will be calculated upon loading the workspace, meaning that they will always be right for the day you're using the workspace.";
         await createBlock(string5, newUid, 5);
-        await createBlock("---", newUid, 6);
+        let string6 = "The final option allows you to define a keyboard shortcut to automatically navigate to your workspace. The shortcut will be SHIFT + ALT + a letter of your choice. Type a single lowercase letter in the space provided. Please note that not all letters will work as some are reserved for use by the browser or other functions. It might require some experimentation to find the right key to use! Setting a new keyboard shortcut requires you to either reload the page or the extension.";
+        await createBlock(string6, newUid, 6);
+        await createBlock("---", newUid, 7);
         let ws_1 = "Workspace Definitions:";
-        let headerUID = await createBlock(ws_1, newUid, 7);
+        let headerUID = await createBlock(ws_1, newUid, 8);
         let ws_2 = "Dummy";
         let secHeaderUID = await createBlock(ws_2, headerUID, 0);
         let ws_3 = "Left Sidebar:";
@@ -67,6 +69,8 @@ async function checkFirstRun() {
         let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
         await createBlock("__add a [[ page link here__", ws_6v, 1);
         await createBlock("__or a (( blockref here__", ws_6v, 2);
+        await createBlock("__or maybe DNP-1 for yesterday or DNP+1 for tomorrow__", ws_6v, 3);
+        await createBlock("__or go crazy and use DNP-365 to see what you were doing last year!__", ws_6v, 4);
         let ws_7 = "Keyboard Shortcut:";
         let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
         await createBlock("__type one letter here__", ws_7v, 1);
@@ -452,7 +456,34 @@ async function gotoWorkspace(workspace) {
                     thisNewCollapsed = "false"
                 }
                 // trim and (( )) from blockrefs
-                if (thisNewUid.startsWith("((")) {
+                if (thisNewUid.trim() == "DNP") { // today's DNP
+                    var today = new Date();
+                    var dd = String(today.getDate()).padStart(2, '0');
+                    var mm = String(today.getMonth() + 1).padStart(2, '0');
+                    var yyyy = today.getFullYear();
+                    thisNewUid = mm + '-' + dd + '-' + yyyy;
+                } else if (thisNewUid.startsWith("DNP")) { // another DNP
+                    var DNPString = thisNewUid.trim();
+                    DNPString = DNPString.slice(3, DNPString.length);
+                    if (DNPString.startsWith("+")) {
+                        DNPString = DNPString.slice(1, DNPString.length);
+                        var date = new Date(new Date().setDate(new Date().getDate() + parseInt(DNPString)));
+                    } else {
+                        DNPString = DNPString.slice(1, DNPString.length);
+                        var date = new Date(new Date().setDate(new Date().getDate() - parseInt(DNPString)));
+                    }
+                    var dd = String(date.getDate()).padStart(2, '0');
+                    var mm = String(date.getMonth() + 1).padStart(2, '0');
+                    var yyyy = date.getFullYear();
+                    thisNewUid = mm + '-' + dd + '-' + yyyy;
+                    var titleDate = convertToRoamDate(thisNewUid);
+                    await window.roamAlphaAPI.createPage({ page: { title: titleDate, uid: thisNewUid } });
+                    var results = window.roamAlphaAPI.data.pull("[:block/children]", [":block/uid", thisNewUid]);
+                    if (results == null) {
+                        let newBlockUid = roamAlphaAPI.util.generateUID();
+                        await window.roamAlphaAPI.createBlock({ location: { "parent-uid": thisNewUid, order: 0 }, block: { string: "", uid: newBlockUid } });
+                    }
+                } else if (thisNewUid.startsWith("((")) {
                     thisNewUid = thisNewUid.slice(2, thisNewUid.length);
                     thisNewUid = thisNewUid.slice(0, -2);
                 } else if (thisNewUid.startsWith("[[")) { // this is a page name not a uid
@@ -489,4 +520,17 @@ async function createBlock(string, uid, order) {
             block: { string: string.toString(), uid: newUid }
         });
     return newUid;
+}
+
+function convertToRoamDate(dateString) {
+    var parsedDate = dateString.split('-');
+    var year = parsedDate[2];
+    var month = Number(parsedDate[0]);
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    var monthName = months[month - 1];
+    var day = Number(parsedDate[1]);
+    let suffix = (day >= 4 && day <= 20) || (day >= 24 && day <= 30)
+        ? "th"
+        : ["st", "nd", "rd"][day % 10 - 1];
+    return "" + monthName + " " + day + suffix + ", " + year + "";
 }
