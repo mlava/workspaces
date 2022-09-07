@@ -130,17 +130,17 @@ async function createWorkspace() {
     }
 
     iziToast.question({
-        color: "blue",
+        theme: 'light',
+        color: 'black',
         layout: 2,
         drag: false,
-        timeout: 100000,
+        timeout: 20000,
         close: false,
         overlay: true,
         displayMode: 2,
         id: "question",
         title: "Workspaces",
-        message:
-            "What do you want to call this Workspace? What key (in addition to ALT-SHIFT) will trigger it?",
+        message: "What do you want to call this Workspace? What key (in addition to ALT-SHIFT) will trigger it?",
         position: "center",
         inputs: [
             [
@@ -155,7 +155,7 @@ async function createWorkspace() {
                 "keyup",
                 function (instance, toast, input, e) {
                 },
-                true,
+                false,
             ],
         ],
         buttons: [
