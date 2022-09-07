@@ -104,6 +104,7 @@ async function createWorkspace() {
     pageName = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${thisPage}"] [?b :node/title ?title]]`);
 
     var RSwindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
+    console.info(RSwindows);
     if (RSwindows) {
         var RSWList = [];
         for (var i = 0; i < RSwindows.length; i++) {
@@ -341,7 +342,7 @@ async function getKBShortcuts() {
 
 async function gotoWorkspace(workspace) {
     let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
-    let q = `[:find (pull ?page [:node/title :block/string :block/uid {:block/children ...} ]) :where [?page :block/uid "${pageUID}"]  ]`;
+    let q = `[:find (pull ?page [:node/title :block/string :block/uid :block/order {:block/children ...} ]) :where [?page :block/uid "${pageUID}"]  ]`;
     var results = await window.roamAlphaAPI.q(q);
     if (results[0][0]?.children.length > 0) {
         for (var i = 0; i < results[0][0]?.children.length; i++) {
@@ -441,6 +442,7 @@ async function gotoWorkspace(workspace) {
     // get and create new right sidebar content
     var descriptors = [];
     if (rightSidebarContent != undefined) {
+        rightSidebarContent = await sortObjectsByOrder(rightSidebarContent);
         for (var j = 0; j < rightSidebarContent.length; j++) {
             if (rightSidebarContent[j]?.string.length > 0) {
                 descriptors[j] = rightSidebarContent[j]?.string.split(",");
@@ -533,4 +535,10 @@ function convertToRoamDate(dateString) {
         ? "th"
         : ["st", "nd", "rd"][day % 10 - 1];
     return "" + monthName + " " + day + suffix + ", " + year + "";
+}
+
+async function sortObjectsByOrder(o) {
+    return o.sort(function (a, b) {
+        return a.order - b.order;
+    });
 }
