@@ -223,7 +223,7 @@ async function createWorkspace() {
 
 async function checkWorkspaces() {
     let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
-    var results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid {:block/children ...} ]) :where [?page :block/uid "${pageUID}"] ]`);
+    var results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid :block/order {:block/children ...} ]) :where [?page :block/uid "${pageUID}"] ]`);
     if (results[0][0]?.children.length > 0) {
         for (var i = 0; i < results[0][0].children.length; i++) {
             if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
@@ -231,6 +231,7 @@ async function checkWorkspaces() {
             }
         }
     }
+    definitions.children = await sortObjectsByOrder(definitions.children); // sort by order
 
     // destroy the rm.topbar div
     if (document.getElementById("workspaces")) {
