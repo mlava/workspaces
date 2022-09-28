@@ -1,5 +1,8 @@
 Create workspaces that you can automatically open with the click of a button.
 
+**New:**
+From version 6, changes to workspace definitions are dynamically updated and you no longer need to reload the extension to make them work. This also applies to keyboard shortcut definitions which have previously been tricky to get working.
+
 Define the open|close state of both sidebars, the main window content and the list of pages/blocks to open in the right sidebar if desired.
 
 Create as many workspaces as you like. If you have only one, a button will appear on the Roam Research topbar that will open the workspace. If you have more than one, the button will turn into a dropdown select menu that opens the workspace when you change it.
@@ -18,7 +21,8 @@ You can also configure things manually (although why would you?):
 - Place any [[pages]] or ((blocks)) you want in the right sidebar, with each one on a new row.
 - Special cases: you could simply put DNP in the Main Window option and the workspace will automatically determine and open the correct daily note. You can use DNP+x or DNP-x in the Right Sidebar section, where x is an integer. This will open the page for tomorrow (DNP+1), yesterday (DNP-1) or even one year ago (DNP-365).
 
-You will need to reload the extension to apply these changes, however a way to do this automatically is on the TODO list.
-
 TODO:
-1. apply changes to workspace definitions without reloading the extension
+
+1. ~~apply changes to workspace definitions without reloading the extension~~
+
+2. auto-save feature for current workspace
