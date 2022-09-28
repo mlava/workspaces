@@ -24,16 +24,21 @@ export default {
             document.getElementById("workspaces").remove();
         }
         window.removeEventListener('keydown', boundKEH);
-        window.removeEventListener('keyup', keyUpEH);
+        //window.removeEventListener('keyup', keyUpEH);
     }
 }
 
 async function checkFirstRun() {
-    var page = await window.roamAlphaAPI.q(`
-    [:find ?e
-        :where [?e :node/title "Workspaces configuration"]]`);
+    var page = await window.roamAlphaAPI.q(`[:find (pull ?page [:block/string :block/uid {:block/children ...}]) :where [?page :node/title "Workspaces configuration"]  ]`);
     if (page.length > 0) { // the page already exists
-        return;
+        if (page[0][0].hasOwnProperty("children")) {
+            for (var i=0; i<page[0][0].children.length; i++) {
+                if (page[0][0].children[i].string == "Workspace Definitions:") {
+                    var pullBlock = page[0][0].children[i].uid;
+                }
+            }
+        }
+        var pageUID = page[0][0].uid;
     } else { // no workspaces page created, so create one
         let newUid = roamAlphaAPI.util.generateUID();
         await window.roamAlphaAPI.createPage({ page: { title: "Workspaces configuration", uid: newUid } });
@@ -75,7 +80,17 @@ async function checkFirstRun() {
         let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
         await createBlock("__type one letter here__", ws_7v, 1);
         await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: newUid } });
+        
+        var pullBlock = headerUID;
     }
+    await window.roamAlphaAPI.data.removePullWatch(
+        "[:block/children :block/uid :block/string {:block/children ...}]",
+        `[:block/uid "${pullBlock}"]`,
+        function a(before, after) { checkWorkspaces(); getKBShortcuts(); });
+    await window.roamAlphaAPI.data.addPullWatch(
+        "[:block/children :block/uid :block/string {:block/children ...}]",
+        `[:block/uid "${pullBlock}"]`,
+        function a(before, after) { checkWorkspaces(); getKBShortcuts(); });
 }
 
 async function createWorkspace() {
@@ -104,7 +119,6 @@ async function createWorkspace() {
     pageName = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${thisPage}"] [?b :node/title ?title]]`);
 
     var RSwindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
-    console.info(RSwindows);
     if (RSwindows) {
         var RSWList = [];
         for (var i = 0; i < RSwindows.length; i++) {
@@ -216,15 +230,13 @@ async function createWorkspace() {
         let ws_7 = "Keyboard Shortcut:";
         let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
         await createBlock(valKb, ws_7v, 1);
-
-        checkWorkspaces();
     }
 }
 
 async function checkWorkspaces() {
     let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
     var results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid :block/order {:block/children ...} ]) :where [?page :block/uid "${pageUID}"] ]`);
-    if (results[0][0]?.children.length > 0) {
+    if (results[0][0].hasOwnProperty("children") && results[0][0]?.children.length > 0) {
         for (var i = 0; i < results[0][0].children.length; i++) {
             if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
                 var definitions = results[0][0]?.children[i];
@@ -303,9 +315,12 @@ async function checkWorkspaces() {
             });
         }
     }
+    console.info("Workspace definitions updated");
 }
 
 async function getKBShortcuts() {
+    window.removeEventListener('keydown', boundKEH);
+    definitions = [];
     let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
     let results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid {:block/children ...} ]) :where [?page :block/uid "${pageUID}"]  ]`);
 
@@ -320,25 +335,25 @@ async function getKBShortcuts() {
     }
 
     keyEventHandler = function (definitions, e) {
-        if (keyDownTrack == false) {
-            let eventKey = e.key.toLowerCase();
+            let eventKey = e.code;
             let eventShift = e.shiftKey;
             let eventAlt = e.altKey;
             for (var i = 0; i < definitions.length; i++) {
-                if (eventKey == definitions[i].kbshortcut && eventShift && eventAlt) {
-                    keyDownTrack = true;
+                keyDownTrack = true;
+                let kbshortcutKey = "Key"+definitions[i].kbshortcut.toUpperCase();
+                if (eventKey == kbshortcutKey && eventShift && eventAlt) {
                     gotoWorkspace(definitions[i].name);
                 }
             }
-        }
     }
     boundKEH = keyEventHandler.bind(null, definitions);
 
-    keyUpEH = function () {
+    /*keyUpEH = function () {
         keyDownTrack = false;
-    }
+    }*/
     window.addEventListener('keydown', boundKEH);
-    window.addEventListener('keyup', keyUpEH);
+    //window.addEventListener('keyup', keyUpEH);
+    console.info("Workspace keyboard Shortcuts updated");
 }
 
 async function gotoWorkspace(workspace) {
@@ -363,6 +378,7 @@ async function gotoWorkspace(workspace) {
     var rightSidebar = undefined;
     var mainString = undefined;
     var rightSidebarContent = undefined;
+
     if (thisDefinition.children.length > 0) {
         for (var i = 0; i < thisDefinition.children.length; i++) {
             if (thisDefinition.children[i].string.startsWith("Left Sidebar:")) {
@@ -428,15 +444,7 @@ async function gotoWorkspace(workspace) {
     let rightSidebarWindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
     if (rightSidebarWindows.length > 0) {
         for (var i = 0; i < rightSidebarWindows.length; i++) {
-            window.roamAlphaAPI.ui.rightSidebar.removeWindow(
-                {
-                    "window":
-                    {
-                        "type": rightSidebarWindows[i]['type'],
-                        "block-uid": rightSidebarWindows[i]['block-uid'] || rightSidebarWindows[i]['page-uid'] || rightSidebarWindows[i]['mentions-uid']
-                    }
-                }
-            ) // thanks to Matt Vogel and his Clear Right Sidebar extension as I couldn't quite get this to work as intended until looking at his code - used with permission
+            window.roamAlphaAPI.ui.rightSidebar.removeWindow({"window":{"type": rightSidebarWindows[i]['type'],"block-uid": rightSidebarWindows[i]['block-uid'] || rightSidebarWindows[i]['page-uid'] || rightSidebarWindows[i]['mentions-uid']}}) // thanks to Matt Vogel and his Clear Right Sidebar extension as I couldn't quite get this to work as intended until looking at his code - used with permission
         }
     }
 
@@ -512,7 +520,6 @@ async function gotoWorkspace(workspace) {
             await roamAlphaAPI.ui.rightSidebar.open();
         }
     }
-    checkWorkspaces();
 }
 
 async function createBlock(string, uid, order) {
