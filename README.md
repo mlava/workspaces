@@ -1,7 +1,8 @@
 Create workspaces that you can automatically open with the click of a button.
 
 **New:**
-From version 6, changes to workspace definitions are dynamically updated and you no longer need to reload the extension to make them work. This also applies to keyboard shortcut definitions which have previously been tricky to get working.
+- From version 6, changes to workspace definitions are dynamically updated and you no longer need to reload the extension to make them work. This also applies to keyboard shortcut definitions which have previously been tricky to get working.
+- First release featuring autosave functionality. Set an interval and this extension will automatically save your workspace at that interval, within your Workspace definitions. This makes it easy to go back if you suffered a crash or some other disaster.
 
 Define the open|close state of both sidebars, the main window content and the list of pages/blocks to open in the right sidebar if desired.
 
