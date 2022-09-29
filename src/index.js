@@ -4,17 +4,97 @@ var boundKEH = undefined;
 var keyUpEH = undefined;
 var definitions = [];
 var keyDownTrack = false;
+var auto = false;
+var checkInterval = 0;
+var checkEveryMinutes, autoLabel, autoMenu;
 
 export default {
     onload: ({ extensionAPI }) => {
+        const config = {
+            tabTitle: "Workspaces",
+            settings: [
+                {
+                    id: "ws-auto",
+                    name: "Autosave",
+                    description: "Automatically save your Roam Research layout at intervals",
+                    action: {
+                        type: "switch",
+                        onChange: (evt) => { setAuto(evt); }
+                    },
+                },
+                {
+                    id: "ws-auto-label",
+                    name: "Autosave workspace label",
+                    description: "Name for your autosaved workspace",
+                    action: { type: "input", placeholder: "Autosave" },
+                },
+                {
+                    id: "ws-auto-time",
+                    name: "Autosave interval",
+                    description: "Frequency in minutes to save your workspace",
+                    action: { type: "input", placeholder: "5" },
+                },/*
+                {
+                    id: "ws-auto-include",
+                    name: "Autosave in Topbar Menu",
+                    description: "Include autosave workspace in Workspaces dropdown",
+                    action: { type: "switch" },
+                },*/
+            ]
+        };
+        extensionAPI.settings.panel.create(config);
+
         window.roamAlphaAPI.ui.commandPalette.addCommand({
             label: "Create Workspace from current state",
-            callback: () => createWorkspace()
+            callback: () => createWorkspace(false, false, false)
         });
 
         checkFirstRun();
         checkWorkspaces();
         getKBShortcuts();
+
+        async function setAuto(evt) { // onchange
+            if (evt.target.checked) {
+                auto = true;
+                autoSave();
+            } else {
+                auto = false;
+                if (checkInterval > 0) clearInterval(checkInterval);
+            }
+        }
+
+        if (extensionAPI.settings.get("ws-auto") == true) { // onload
+            auto = true;
+            autoSave();
+        }
+
+        async function autoSave() {
+            if (extensionAPI.settings.get("ws-auto-time")) {
+                checkEveryMinutes = extensionAPI.settings.get("ws-auto-time");
+            } else {
+                checkEveryMinutes = 5;
+            }
+            if (extensionAPI.settings.get("ws-auto-label")) {
+                autoLabel = extensionAPI.settings.get("ws-auto-label");
+            } else {
+                autoLabel ="Autosave";
+            }   
+            /*         
+            if (extensionAPI.settings.get("ws-auto-include") == true) {
+                autoMenu = true;
+            } else {
+                autoMenu = false;
+            }
+            */
+
+            setTimeout(async () => {
+                await createWorkspace(auto, autoLabel, autoMenu);
+                try { if (checkInterval > 0) clearInterval(checkInterval) } catch (e) { }
+                checkInterval = setInterval(async () => {
+                    await createWorkspace(auto, autoLabel/*, autoMenu*/)
+                }, checkEveryMinutes * 60000);
+            }, 10000)
+        }
     },
     onunload: () => {
         window.roamAlphaAPI.ui.commandPalette.removeCommand({
@@ -25,6 +105,7 @@ export default {
         }
         window.removeEventListener('keydown', boundKEH);
         //window.removeEventListener('keyup', keyUpEH);
+        if (checkInterval > 0) clearInterval(checkInterval);
     }
 }
 
@@ -32,7 +113,7 @@ async function checkFirstRun() {
     var page = await window.roamAlphaAPI.q(`[:find (pull ?page [:block/string :block/uid {:block/children ...}]) :where [?page :node/title "Workspaces configuration"]  ]`);
     if (page.length > 0) { // the page already exists
         if (page[0][0].hasOwnProperty("children")) {
-            for (var i=0; i<page[0][0].children.length; i++) {
+            for (var i = 0; i < page[0][0].children.length; i++) {
                 if (page[0][0].children[i].string == "Workspace Definitions:") {
                     var pullBlock = page[0][0].children[i].uid;
                 }
@@ -80,7 +161,7 @@ async function checkFirstRun() {
         let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
         await createBlock("__type one letter here__", ws_7v, 1);
         await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: newUid } });
-        
+
         var pullBlock = headerUID;
     }
     await window.roamAlphaAPI.data.removePullWatch(
@@ -93,7 +174,7 @@ async function checkFirstRun() {
         function a(before, after) { checkWorkspaces(); getKBShortcuts(); });
 }
 
-async function createWorkspace() {
+async function createWorkspace(autosaved, autoLabel) {
     // get required information to define a workspace
     var leftSidebarState, rightSidebarState;
     if (document.querySelector('.rm-open-left-sidebar-btn')) {
@@ -143,54 +224,58 @@ async function createWorkspace() {
         }
     }
 
-    iziToast.question({
-        theme: 'light',
-        color: 'black',
-        layout: 2,
-        drag: false,
-        timeout: 20000,
-        close: false,
-        overlay: true,
-        displayMode: 2,
-        id: "question",
-        title: "Workspaces",
-        message: "What do you want to call this Workspace? What key (in addition to ALT-SHIFT) will trigger it?",
-        position: "center",
-        inputs: [
-            [
-                '<input type="text" placeholder="name">',
-                "keyup",
-                function (instance, toast, input, e) {
-                },
-                true,
+    if (autosaved) {
+        updateAutoWS(autoLabel);
+    } else {
+        iziToast.question({
+            theme: 'light',
+            color: 'black',
+            layout: 2,
+            drag: false,
+            timeout: 20000,
+            close: false,
+            overlay: true,
+            displayMode: 2,
+            id: "question",
+            title: "Workspaces",
+            message: "What do you want to call this Workspace? What key (in addition to ALT-SHIFT) will trigger it?",
+            position: "center",
+            inputs: [
+                [
+                    '<input type="text" placeholder="name">',
+                    "keyup",
+                    function (instance, toast, input, e) {
+                    },
+                    true,
+                ],
+                [
+                    '<input type="text" placeholder="keyboard shortcut key">',
+                    "keyup",
+                    function (instance, toast, input, e) {
+                    },
+                    false,
+                ],
             ],
-            [
-                '<input type="text" placeholder="keyboard shortcut key">',
-                "keyup",
-                function (instance, toast, input, e) {
-                },
-                false,
+            buttons: [
+                [
+                    "<button><b>Confirm</b></button>",
+                    function (instance, toast, button, e, inputs) {
+                        writeNewWS(inputs[0].value, inputs[1].value);
+                        instance.hide({ transitionOut: "fadeOut" }, toast, "button");
+                    },
+                    false,
+                ],
+                [
+                    "<button>Cancel</button>",
+                    function (instance, toast, button, e) {
+                        instance.hide({ transitionOut: "fadeOut" }, toast, "button");
+                    },
+                ],
             ],
-        ],
-        buttons: [
-            [
-                "<button><b>Confirm</b></button>",
-                function (instance, toast, button, e, inputs) {
-                    writeNewWS(inputs[0].value, inputs[1].value);
-                    instance.hide({ transitionOut: "fadeOut" }, toast, "button");
-                },
-                false,
-            ],
-            [
-                "<button>Cancel</button>",
-                function (instance, toast, button, e) {
-                    instance.hide({ transitionOut: "fadeOut" }, toast, "button");
-                },
-            ],
-        ],
-        onClosing: function (instance, toast, closedBy) { },
-        onClosed: function (instance, toast, closedBy) { },
-    });
+            onClosing: function (instance, toast, closedBy) { },
+            onClosed: function (instance, toast, closedBy) { },
+        });
+    }
 
     async function writeNewWS(val, valKb) {
         // write new workspace definition to Workspaces configuration page
@@ -230,6 +315,63 @@ async function createWorkspace() {
         let ws_7 = "Keyboard Shortcut:";
         let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
         await createBlock(valKb, ws_7v, 1);
+    }
+
+    async function updateAutoWS(autoLabel) {
+        var secHeaderUID = undefined;
+        console.info("Autosaving workspace");
+        // write or update autosave workspace definition to Workspaces configuration page
+        let parentUID = definitions.uid;
+        var order;
+        var autosaveLabel = "* "+autoLabel.toString();
+
+        if (definitions.hasOwnProperty("children")) {
+            order = 1 + (definitions.children.length);
+            for (var i=0; i<definitions.children.length; i++) {
+                if (definitions.children[i].string == autosaveLabel) {
+                    secHeaderUID = definitions.children[i].uid;
+                    if (definitions.children[i].hasOwnProperty("children")) {
+                        for (var j=0; j<definitions.children[i].children.length; j++) {
+                            window.roamAlphaAPI.deleteBlock({ "block": { "uid": definitions.children[i].children[j].uid } })
+                        }
+                    }
+                }
+            }
+        } else {
+            order = 1;
+        }
+        
+        if (secHeaderUID == undefined) {
+            secHeaderUID = await createBlock(autosaveLabel, parentUID, order);
+        }
+        let ws_3 = "Left Sidebar:";
+        let ws_3v = await createBlock(ws_3, secHeaderUID, 0);
+        await createBlock(leftSidebarState, ws_3v, 1);
+        let ws_4 = "Right Sidebar:";
+        let ws_4v = await createBlock(ws_4, secHeaderUID, 1);
+        await createBlock(rightSidebarState, ws_4v, 1);
+        let ws_5 = "Main Content:";
+        let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
+        if (pageName != undefined && pageName.length > 0) {
+            await createBlock("[[" + pageName + "]]", ws_5v, 1);
+        } else {
+            await createBlock(thisPage, ws_5v, 1);
+        }
+        let ws_6 = "Right Sidebar Content:";
+        let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
+        if (RSWList.length > 0) {
+            for (var i = 0; i < RSWList.length; i++) {
+                if (RSWList[i].type == "outline") {
+                    var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`);
+                    await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                } else {
+                    await createBlock("((" + RSWList[i].uid + "))," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                }
+            }
+        }
+        let ws_7 = "Keyboard Shortcut:";
+        let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
+        await createBlock("a", ws_7v, 1);
     }
 }
 
@@ -335,16 +477,16 @@ async function getKBShortcuts() {
     }
 
     keyEventHandler = function (definitions, e) {
-            let eventKey = e.code;
-            let eventShift = e.shiftKey;
-            let eventAlt = e.altKey;
-            for (var i = 0; i < definitions.length; i++) {
-                keyDownTrack = true;
-                let kbshortcutKey = "Key"+definitions[i].kbshortcut.toUpperCase();
-                if (eventKey == kbshortcutKey && eventShift && eventAlt) {
-                    gotoWorkspace(definitions[i].name);
-                }
+        let eventKey = e.code;
+        let eventShift = e.shiftKey;
+        let eventAlt = e.altKey;
+        for (var i = 0; i < definitions.length; i++) {
+            keyDownTrack = true;
+            let kbshortcutKey = "Key" + definitions[i].kbshortcut.toUpperCase();
+            if (eventKey == kbshortcutKey && eventShift && eventAlt) {
+                gotoWorkspace(definitions[i].name);
             }
+        }
     }
     boundKEH = keyEventHandler.bind(null, definitions);
 
@@ -444,7 +586,7 @@ async function gotoWorkspace(workspace) {
     let rightSidebarWindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
     if (rightSidebarWindows.length > 0) {
         for (var i = 0; i < rightSidebarWindows.length; i++) {
-            window.roamAlphaAPI.ui.rightSidebar.removeWindow({"window":{"type": rightSidebarWindows[i]['type'],"block-uid": rightSidebarWindows[i]['block-uid'] || rightSidebarWindows[i]['page-uid'] || rightSidebarWindows[i]['mentions-uid']}}) // thanks to Matt Vogel and his Clear Right Sidebar extension as I couldn't quite get this to work as intended until looking at his code - used with permission
+            window.roamAlphaAPI.ui.rightSidebar.removeWindow({ "window": { "type": rightSidebarWindows[i]['type'], "block-uid": rightSidebarWindows[i]['block-uid'] || rightSidebarWindows[i]['page-uid'] || rightSidebarWindows[i]['mentions-uid'] } }) // thanks to Matt Vogel and his Clear Right Sidebar extension as I couldn't quite get this to work as intended until looking at his code - used with permission
         }
     }
 
