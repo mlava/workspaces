@@ -2,7 +2,8 @@ import iziToast from "izitoast";
 let keyEventHandler = undefined;
 var boundKEH = undefined;
 var keyUpEH = undefined;
-var definitions = [];
+var kbDefinitions = [];
+var pullBlock = undefined
 var keyDownTrack = false;
 var auto = false;
 var checkInterval = 0;
@@ -77,8 +78,8 @@ export default {
             if (extensionAPI.settings.get("ws-auto-label")) {
                 autoLabel = extensionAPI.settings.get("ws-auto-label");
             } else {
-                autoLabel ="Autosave";
-            }   
+                autoLabel = "Autosave";
+            }
             /*         
             if (extensionAPI.settings.get("ws-auto-include") == true) {
                 autoMenu = true;
@@ -106,6 +107,11 @@ export default {
         window.removeEventListener('keydown', boundKEH);
         //window.removeEventListener('keyup', keyUpEH);
         if (checkInterval > 0) clearInterval(checkInterval);
+
+        window.roamAlphaAPI.data.removePullWatch(
+            "[:block/children :block/uid :block/string {:block/children ...}]",
+            `[:block/uid "${pullBlock}"]`,
+            function a(before, after) { checkWorkspaces(); getKBShortcuts(); });
     }
 }
 
@@ -162,7 +168,7 @@ async function checkFirstRun() {
         await createBlock("__type one letter here__", ws_7v, 1);
         await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: newUid } });
 
-        var pullBlock = headerUID;
+        pullBlock = headerUID;
     }
     await window.roamAlphaAPI.data.removePullWatch(
         "[:block/children :block/uid :block/string {:block/children ...}]",
@@ -323,15 +329,15 @@ async function createWorkspace(autosaved, autoLabel) {
         // write or update autosave workspace definition to Workspaces configuration page
         let parentUID = definitions.uid;
         var order;
-        var autosaveLabel = "* "+autoLabel.toString();
+        var autosaveLabel = "* " + autoLabel.toString();
 
         if (definitions.hasOwnProperty("children")) {
             order = 1 + (definitions.children.length);
-            for (var i=0; i<definitions.children.length; i++) {
+            for (var i = 0; i < definitions.children.length; i++) {
                 if (definitions.children[i].string == autosaveLabel) {
                     secHeaderUID = definitions.children[i].uid;
                     if (definitions.children[i].hasOwnProperty("children")) {
-                        for (var j=0; j<definitions.children[i].children.length; j++) {
+                        for (var j = 0; j < definitions.children[i].children.length; j++) {
                             window.roamAlphaAPI.deleteBlock({ "block": { "uid": definitions.children[i].children[j].uid } })
                         }
                     }
@@ -340,7 +346,7 @@ async function createWorkspace(autosaved, autoLabel) {
         } else {
             order = 1;
         }
-        
+
         if (secHeaderUID == undefined) {
             secHeaderUID = await createBlock(autosaveLabel, parentUID, order);
         }
@@ -462,7 +468,9 @@ async function checkWorkspaces() {
 
 async function getKBShortcuts() {
     window.removeEventListener('keydown', boundKEH);
-    definitions = [];
+    while (kbDefinitions.length) { 
+        kbDefinitions.pop(); 
+    }
     let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
     let results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid {:block/children ...} ]) :where [?page :block/uid "${pageUID}"]  ]`);
 
@@ -470,25 +478,25 @@ async function getKBShortcuts() {
         for (var i = 0; i < results[0][0].children.length; i++) {
             if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
                 for (var j = 0; j < results[0][0].children[i]?.children.length; j++) {
-                    definitions.push({ "name": results[0][0]?.children[i]?.children[j]?.string, "kbshortcut": results[0][0]?.children[i]?.children[j]?.children[4]?.children[0]?.string });
+                    kbDefinitions.push({ "name": results[0][0]?.children[i]?.children[j]?.string, "kbshortcut": results[0][0]?.children[i]?.children[j]?.children[4]?.children[0]?.string });
                 }
             }
         }
     }
 
-    keyEventHandler = function (definitions, e) {
+    keyEventHandler = function (kbDefinitions, e) {
         let eventKey = e.code;
         let eventShift = e.shiftKey;
         let eventAlt = e.altKey;
-        for (var i = 0; i < definitions.length; i++) {
+        for (var i = 0; i < kbDefinitions.length; i++) {
             keyDownTrack = true;
-            let kbshortcutKey = "Key" + definitions[i].kbshortcut.toUpperCase();
+            let kbshortcutKey = "Key" + kbDefinitions[i].kbshortcut.toUpperCase();
             if (eventKey == kbshortcutKey && eventShift && eventAlt) {
-                gotoWorkspace(definitions[i].name);
+                gotoWorkspace(kbDefinitions[i].name);
             }
         }
     }
-    boundKEH = keyEventHandler.bind(null, definitions);
+    boundKEH = keyEventHandler.bind(null, kbDefinitions);
 
     /*keyUpEH = function () {
         keyDownTrack = false;
@@ -630,7 +638,12 @@ async function gotoWorkspace(workspace) {
                     var yyyy = date.getFullYear();
                     thisNewUid = mm + '-' + dd + '-' + yyyy;
                     var titleDate = convertToRoamDate(thisNewUid);
-                    await window.roamAlphaAPI.createPage({ page: { title: titleDate, uid: thisNewUid } });
+                    var page = await window.roamAlphaAPI.q(`
+                    [:find ?e
+                        :where [?e :node/title "${titleDate}"]]`);
+                    if (page.length < 1) { // create new page
+                        await window.roamAlphaAPI.createPage({ page: { title: titleDate, uid: thisNewUid } });
+                    }
                     var results = window.roamAlphaAPI.data.pull("[:block/children]", [":block/uid", thisNewUid]);
                     if (results == null) {
                         let newBlockUid = roamAlphaAPI.util.generateUID();
