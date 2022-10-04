@@ -3,6 +3,7 @@ Create workspaces that you can automatically open with the click of a button.
 **New:**
 - From version 6, changes to workspace definitions are dynamically updated and you no longer need to reload the extension to make them work. This also applies to keyboard shortcut definitions which have previously been tricky to get working.
 - First release featuring autosave functionality. Set an interval and this extension will automatically save your workspace at that interval, within your Workspace definitions. This makes it easy to go back if you suffered a crash or some other disaster.
+- Custom CSS. Apply CSS styling when you open a workspace. You can either place the CSS in a CSS code block or use a block ref to any css block on your graph.
 
 Define the open|close state of both sidebars, the main window content and the list of pages/blocks to open in the right sidebar if desired.
 
@@ -11,6 +12,10 @@ Create as many workspaces as you like. If you have only one, a button will appea
 This video walks through the basics:
 
 https://www.loom.com/share/4ca0dd72a0fa4c46b012a59717e503d7
+
+And this one walks through some new features:
+
+https://www.loom.com/share/78bdf24f7478443b8431c52ec1f54472
 
 Once installed, this extension creates a page in your graph called 'Workspaces configuration' and will automatically navigate there. A dummy workspace definition is supplied which demonstrates the required format.
 
@@ -26,4 +31,6 @@ TODO:
 
 1. ~~apply changes to workspace definitions without reloading the extension~~
 
-2. auto-save feature for current workspace
+2. ~~auto-save feature for current workspace~~
+
+3. API to allow other extensions to interact with Workspaces
