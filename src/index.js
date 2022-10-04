@@ -96,6 +96,17 @@ export default {
                 }, checkEveryMinutes * 60000);
             }, 10000)
         }
+
+        /*
+        window.roamWorkspacesAPI = {
+            openWorkspace: gotoWorkspace,
+            clearWorkspaceCSS: clearWorkspaceCSS,
+            createWorkspace: createWorkspace,
+            listWorkspaces: listWorkspaces,
+            deleteWorkspace: deleteWorkspace,
+            addWorkspaceOpenedWatch: addWorkspaceOpenedWatch,
+            removeWorkspaceOpenedWatch: removeWorkspaceOpenedWatch,
+        }*/
     },
     onunload: () => {
         window.roamAlphaAPI.ui.commandPalette.removeCommand({
@@ -112,6 +123,8 @@ export default {
             "[:block/children :block/uid :block/string {:block/children ...}]",
             `[:block/uid "${pullBlock}"]`,
             function a(before, after) { checkWorkspaces(); getKBShortcuts(); });
+
+        clearWorkspaceCSS();
     }
 }
 
@@ -166,6 +179,9 @@ async function checkFirstRun() {
         let ws_7 = "Keyboard Shortcut:";
         let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
         await createBlock("__type one letter here__", ws_7v, 1);
+        let ws_8 = "Custom CSS:";
+        let ws_8v = await createBlock(ws_8, secHeaderUID, 5);
+        await createBlock("```css\nplace any custom css in this code block```", ws_8v, 1);
         await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: newUid } });
 
         pullBlock = headerUID;
@@ -173,11 +189,158 @@ async function checkFirstRun() {
     await window.roamAlphaAPI.data.removePullWatch(
         "[:block/children :block/uid :block/string {:block/children ...}]",
         `[:block/uid "${pullBlock}"]`,
-        function a(before, after) { checkWorkspaces(); getKBShortcuts(); });
+        function a(before, after) {
+            checkWorkspaces(before, after);
+            getKBShortcuts();
+        });
     await window.roamAlphaAPI.data.addPullWatch(
         "[:block/children :block/uid :block/string {:block/children ...}]",
         `[:block/uid "${pullBlock}"]`,
-        function a(before, after) { checkWorkspaces(); getKBShortcuts(); });
+        function a(before, after) {
+            checkWorkspaces(before, after);
+            getKBShortcuts();
+        });
+}
+
+async function checkWorkspaces(before, after) {
+    /* // experimenting only at the minute
+    if (before != undefined && before != null) {
+        if (before[":block/children"].length > 0) {
+            for (var i = 0; i < before[":block/children"].length; i++) {
+                var wsName = before[":block/children"][i][":block/string"];
+                window.roamAlphaAPI.ui.commandPalette.removeCommand({
+                    label: 'Open Workspace: '+wsName+''
+                });
+            }
+        }
+    } */
+    let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
+    var results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid :block/order {:block/children ...} ]) :where [?page :block/uid "${pageUID}"] ]`);
+    if (results[0][0].hasOwnProperty("children") && results[0][0]?.children.length > 0) {
+        for (var i = 0; i < results[0][0].children.length; i++) {
+            if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
+                var definitions = results[0][0]?.children[i];
+            }
+        }
+    }
+    definitions.children = await sortObjectsByOrder(definitions.children); // sort by order
+
+    // destroy the rm.topbar div
+    if (document.getElementById("workspaces")) {
+        document.getElementById("workspaces").remove();
+    }
+
+    // create the rm.topbar div
+    if (definitions?.children.length > 1) {
+        for (var i = 0; i < definitions.children.length; i++) {
+            if (!document.getElementById('workspaces')) {
+                var divParent = document.createElement('div');
+                divParent.classList.add('.flex-container');
+                divParent.innerHTML = "";
+                divParent.id = 'workspaces';
+
+                var div = document.createElement('div');
+                div.classList.add('flex-items');
+                div.innerHTML = "";
+                div.id = "workspacesSelect";
+                var span = document.createElement('span');
+                span.classList.add('bp3-button', 'bp3-minimal', 'bp3-small', 'bp3-icon-folder-shared-open');
+                var selectString = "<select name=\"workspacesSelectMenu\" id=\"workspacesSelectMenu\"><option value=\"null\">Select...</option>";
+                for (var j = 0; j < definitions.children.length; j++) {
+                    selectString += "<option value=\"" + definitions.children[j].string + "\">" + definitions.children[j].string + "</option>";
+                }
+                selectString += "<option value=\"clearWorkspacesCSS\">Clear CSS</option></select>";
+                span.innerHTML = selectString;
+                div.append(span);
+                divParent.append(div);
+
+                var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
+                var topBarRow = topBarContent.childNodes[1];
+
+                if (topBarContent && topBarRow) {
+                    topBarRow.parentNode.insertBefore(divParent, topBarRow);
+                }
+                document.getElementById("workspacesSelectMenu").addEventListener("change", () => {
+                    if (document.getElementById("workspacesSelectMenu").value != "null") {
+                        gotoWorkspace(document.getElementById("workspacesSelectMenu").value);
+                    }
+                });
+            }
+            /* // experimenting only at the minute
+            var wsName = definitions.children[i].string;
+            console.info(wsName);
+            await window.roamAlphaAPI.ui.commandPalette.addCommand({
+                label: "Open Workspace: "+wsName+"",
+                callback: () => gotoWorkspace(wsName)
+            }); */
+        }
+    } else {
+        if (!document.getElementById('workspaces')) {
+            var divParent = document.createElement('div');
+            divParent.classList.add('.flex-container');
+            divParent.innerHTML = "";
+            divParent.id = 'workspaces';
+
+            var div = document.createElement('div');
+            div.classList.add('flex-items');
+            div.innerHTML = "";
+            div.id = definitions?.children[0].string;
+            var span = document.createElement('span');
+            span.classList.add('bp3-button', 'bp3-minimal', 'bp3-small', 'bp3-icon-folder-shared-open');
+            span.innerHTML = definitions.children[0].string;
+            div.append(span);
+            divParent.append(div);
+
+            var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
+            var topBarRow = topBarContent.childNodes[1];
+
+            if (topBarContent && topBarRow) {
+                topBarRow.parentNode.insertBefore(divParent, topBarRow);
+            }
+            div.addEventListener('click', function () {
+                gotoWorkspace(span.innerHTML);
+            });
+        }
+    }
+    console.info("Workspace definitions updated");
+}
+
+async function getKBShortcuts() {
+    window.removeEventListener('keydown', boundKEH);
+    while (kbDefinitions.length) {
+        kbDefinitions.pop();
+    }
+    let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
+    let results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid {:block/children ...} ]) :where [?page :block/uid "${pageUID}"]  ]`);
+
+    if (results[0][0]?.children.length > 0) {
+        for (var i = 0; i < results[0][0].children.length; i++) {
+            if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
+                for (var j = 0; j < results[0][0].children[i]?.children.length; j++) {
+                    for (var k = 0; k < results[0][0].children[i].children[j].children.length; k++) {
+                        if (results[0][0]?.children[i].children[j].children[k].string == "Keyboard Shortcut:") {
+                            kbDefinitions.push({ "name": results[0][0].children[i].children[j].string, "kbshortcut": results[0][0].children[i].children[j].children[k].children[0].string });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    keyEventHandler = function (kbDefinitions, e) {
+        let eventKey = e.code;
+        let eventShift = e.shiftKey;
+        let eventAlt = e.altKey;
+        for (var i = 0; i < kbDefinitions.length; i++) {
+            let kbshortcutKey = "Key" + kbDefinitions[i].kbshortcut.toUpperCase();
+            if (eventKey == kbshortcutKey && eventShift && eventAlt) {
+                gotoWorkspace(kbDefinitions[i].name);
+            }
+        }
+    }
+    boundKEH = keyEventHandler.bind(null, kbDefinitions);
+    window.addEventListener('keydown', boundKEH);
+    console.info("Workspace keyboard Shortcuts updated");
 }
 
 async function createWorkspace(autosaved, autoLabel) {
@@ -321,6 +484,9 @@ async function createWorkspace(autosaved, autoLabel) {
         let ws_7 = "Keyboard Shortcut:";
         let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
         await createBlock(valKb, ws_7v, 1);
+        let ws_8 = "Custom CSS:";
+        let ws_8v = await createBlock(ws_8, secHeaderUID, 5);
+        await createBlock("```css\nplace any custom css in this code block```", ws_8v, 1);
     }
 
     async function updateAutoWS(autoLabel) {
@@ -381,312 +547,221 @@ async function createWorkspace(autosaved, autoLabel) {
     }
 }
 
-async function checkWorkspaces() {
-    let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
-    var results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid :block/order {:block/children ...} ]) :where [?page :block/uid "${pageUID}"] ]`);
-    if (results[0][0].hasOwnProperty("children") && results[0][0]?.children.length > 0) {
-        for (var i = 0; i < results[0][0].children.length; i++) {
-            if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
-                var definitions = results[0][0]?.children[i];
-            }
-        }
-    }
-    definitions.children = await sortObjectsByOrder(definitions.children); // sort by order
-
-    // destroy the rm.topbar div
-    if (document.getElementById("workspaces")) {
-        document.getElementById("workspaces").remove();
-    }
-
-    // create the rm.topbar div
-    if (definitions?.children.length > 1) {
-        for (var i = 0; i < definitions?.children.length; i++) {
-            if (!document.getElementById('workspaces')) {
-                var divParent = document.createElement('div');
-                divParent.classList.add('.flex-container');
-                divParent.innerHTML = "";
-                divParent.id = 'workspaces';
-
-                var div = document.createElement('div');
-                div.classList.add('flex-items');
-                div.innerHTML = "";
-                div.id = "workspacesSelect";
-                var span = document.createElement('span');
-                span.classList.add('bp3-button', 'bp3-minimal', 'bp3-small', 'bp3-icon-folder-shared-open');
-                var selectString = "<select name=\"workspacesSelectMenu\" id=\"workspacesSelectMenu\"><option value=\"null\">Select...</option>";
-                for (i = 0; i < definitions.children.length; i++) {
-                    selectString += "<option value=\"" + definitions.children[i].string + "\">" + definitions.children[i].string + "</option>";
-                }
-                selectString += "</select>";
-                span.innerHTML = selectString;
-                div.append(span);
-                divParent.append(div);
-
-                var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
-                var topBarRow = topBarContent.childNodes[1];
-
-                if (topBarContent && topBarRow) {
-                    topBarRow.parentNode.insertBefore(divParent, topBarRow);
-                }
-                document.getElementById("workspacesSelectMenu").addEventListener("change", () => {
-                    if (document.getElementById("workspacesSelectMenu").value != "null") {
-                        gotoWorkspace(document.getElementById("workspacesSelectMenu").value);
-                    }
-                });
-            }
-        }
-    } else {
-        if (!document.getElementById('workspaces')) {
-            var divParent = document.createElement('div');
-            divParent.classList.add('.flex-container');
-            divParent.innerHTML = "";
-            divParent.id = 'workspaces';
-
-            var div = document.createElement('div');
-            div.classList.add('flex-items');
-            div.innerHTML = "";
-            div.id = definitions?.children[0].string;
-            var span = document.createElement('span');
-            span.classList.add('bp3-button', 'bp3-minimal', 'bp3-small', 'bp3-icon-folder-shared-open');
-            span.innerHTML = definitions.children[0].string;
-            div.append(span);
-            divParent.append(div);
-
-            var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
-            var topBarRow = topBarContent.childNodes[1];
-
-            if (topBarContent && topBarRow) {
-                topBarRow.parentNode.insertBefore(divParent, topBarRow);
-            }
-            div.addEventListener('click', function () {
-                gotoWorkspace(span.innerHTML);
-            });
-        }
-    }
-    console.info("Workspace definitions updated");
-}
-
-async function getKBShortcuts() {
-    window.removeEventListener('keydown', boundKEH);
-    while (kbDefinitions.length) { 
-        kbDefinitions.pop(); 
-    }
-    let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
-    let results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid {:block/children ...} ]) :where [?page :block/uid "${pageUID}"]  ]`);
-
-    if (results[0][0]?.children.length > 0) {
-        for (var i = 0; i < results[0][0].children.length; i++) {
-            if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
-                for (var j = 0; j < results[0][0].children[i]?.children.length; j++) {
-                    kbDefinitions.push({ "name": results[0][0]?.children[i]?.children[j]?.string, "kbshortcut": results[0][0]?.children[i]?.children[j]?.children[4]?.children[0]?.string });
-                }
-            }
-        }
-    }
-
-    keyEventHandler = function (kbDefinitions, e) {
-        let eventKey = e.code;
-        let eventShift = e.shiftKey;
-        let eventAlt = e.altKey;
-        for (var i = 0; i < kbDefinitions.length; i++) {
-            keyDownTrack = true;
-            let kbshortcutKey = "Key" + kbDefinitions[i].kbshortcut.toUpperCase();
-            if (eventKey == kbshortcutKey && eventShift && eventAlt) {
-                gotoWorkspace(kbDefinitions[i].name);
-            }
-        }
-    }
-    boundKEH = keyEventHandler.bind(null, kbDefinitions);
-
-    /*keyUpEH = function () {
-        keyDownTrack = false;
-    }*/
-    window.addEventListener('keydown', boundKEH);
-    //window.addEventListener('keyup', keyUpEH);
-    console.info("Workspace keyboard Shortcuts updated");
-}
-
 async function gotoWorkspace(workspace) {
-    let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
-    let q = `[:find (pull ?page [:node/title :block/string :block/uid :block/order {:block/children ...} ]) :where [?page :block/uid "${pageUID}"]  ]`;
-    var results = await window.roamAlphaAPI.q(q);
-    if (results[0][0]?.children.length > 0) {
-        for (var i = 0; i < results[0][0]?.children.length; i++) {
-            if (results[0][0]?.children[i].string.startsWith("Workspace Definitions:")) {
-                var definitions = results[0][0]?.children[i];
-            }
-        }
-    }
-    if (definitions?.children.length > 0) {
-        for (var i = 0; i < definitions?.children.length; i++) {
-            if (definitions?.children[i]?.string == workspace)
-                var thisDefinition = definitions?.children[i];
-        }
-    }
-
-    var leftSidebar = undefined;
-    var rightSidebar = undefined;
-    var mainString = undefined;
-    var rightSidebarContent = undefined;
-
-    if (thisDefinition.children.length > 0) {
-        for (var i = 0; i < thisDefinition.children.length; i++) {
-            if (thisDefinition.children[i].string.startsWith("Left Sidebar:")) {
-                if (thisDefinition.children[i].hasOwnProperty("children")) {
-                    leftSidebar = thisDefinition.children[i]?.children[0]?.string;
-                }
-            } else if (thisDefinition.children[i].string.startsWith("Right Sidebar:")) {
-                if (thisDefinition.children[i].hasOwnProperty('children')) {
-                    rightSidebar = thisDefinition.children[i]?.children[0]?.string;
-                }
-            } else if (thisDefinition.children[i].string.startsWith("Main Content:")) {
-                if (thisDefinition.children[i].hasOwnProperty('children')) {
-                    mainString = thisDefinition.children[i]?.children[0]?.string;
-                }
-            } else if (thisDefinition.children[i].string.startsWith("Right Sidebar Content:")) {
-                if (thisDefinition.children[i].hasOwnProperty('children')) {
-                    rightSidebarContent = thisDefinition.children[i]?.children;
-                }
-            }
-        }
-    }
-
-    var leftSidebarState;
-    if (document.querySelector('.rm-open-left-sidebar-btn')) {
-        leftSidebarState = "closed";
+    if (workspace == "clearWorkspacesCSS") { // remove custom css
+        clearWorkspaceCSS();
     } else {
-        leftSidebarState = "open";
-    }
-
-    // set left sidebar open state, but only if it isn't already in that state
-    if (leftSidebar != undefined) {
-        if (leftSidebar == "closed" && leftSidebarState == "open") {
-            await roamAlphaAPI.ui.leftSidebar.close();
-        } else if (leftSidebar == "open" && leftSidebarState == "closed") {
-            await roamAlphaAPI.ui.leftSidebar.open();
-        }
-    }
-
-    // set main window content
-    if (mainString != undefined) {
-        if (mainString.trim() == "DNP") {
-            var today = new Date();
-            var dd = String(today.getDate()).padStart(2, '0');
-            var mm = String(today.getMonth() + 1).padStart(2, '0');
-            var yyyy = today.getFullYear();
-            var dateUID = mm + '-' + dd + '-' + yyyy;
-            await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: dateUID } });
-        } else if (mainString.startsWith("((")) {
-            mainString = mainString.slice(2, mainString.length);
-            mainString = mainString.slice(0, -2);
-            await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: mainString } });
-        } else if (mainString.startsWith("[[")) { // this is a page name not a uid
-            mainString = mainString.slice(2, mainString.length);
-            mainString = mainString.slice(0, -2);
-            let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "${mainString}"][?e :block/uid ?uid ] ]`);
-            await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: pageUID[0][0].toString() } });
-        } else {
-            await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: mainString } });
-        }
-    }
-
-    // remove any pre-existing right sidebar content
-    let rightSidebarWindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
-    if (rightSidebarWindows.length > 0) {
-        for (var i = 0; i < rightSidebarWindows.length; i++) {
-            window.roamAlphaAPI.ui.rightSidebar.removeWindow({ "window": { "type": rightSidebarWindows[i]['type'], "block-uid": rightSidebarWindows[i]['block-uid'] || rightSidebarWindows[i]['page-uid'] || rightSidebarWindows[i]['mentions-uid'] } }) // thanks to Matt Vogel and his Clear Right Sidebar extension as I couldn't quite get this to work as intended until looking at his code - used with permission
-        }
-    }
-
-    // get and create new right sidebar content
-    var descriptors = [];
-    if (rightSidebarContent != undefined) {
-        rightSidebarContent = await sortObjectsByOrder(rightSidebarContent);
-        for (var j = 0; j < rightSidebarContent.length; j++) {
-            if (rightSidebarContent[j]?.string.length > 0) {
-                descriptors[j] = rightSidebarContent[j]?.string.split(",");
-                var thisNewUid = descriptors[j][0]?.trim();
-
-                // handle missing definitions for mode and collapsed state
-                var thisNewState = descriptors[j][1]?.trim();
-                if (thisNewState == null) {
-                    thisNewState = "outline"
+        let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
+        let q = `[:find (pull ?page [:node/title :block/string :block/uid :block/order {:block/children ...} ]) :where [?page :block/uid "${pageUID}"]  ]`;
+        var results = await window.roamAlphaAPI.q(q);
+        if (results[0][0]?.children.length > 0) {
+            for (var i = 0; i < results[0][0]?.children.length; i++) {
+                if (results[0][0]?.children[i].string.startsWith("Workspace Definitions:")) {
+                    var definitions = results[0][0]?.children[i];
                 }
-                var thisNewCollapsed = descriptors[j][2]?.trim();
-                if (thisNewCollapsed == null) {
-                    thisNewCollapsed = "false"
-                }
-                // trim and (( )) from blockrefs
-                if (thisNewUid.trim() == "DNP") { // today's DNP
-                    var today = new Date();
-                    var dd = String(today.getDate()).padStart(2, '0');
-                    var mm = String(today.getMonth() + 1).padStart(2, '0');
-                    var yyyy = today.getFullYear();
-                    thisNewUid = mm + '-' + dd + '-' + yyyy;
-                } else if (thisNewUid.startsWith("DNP")) { // another DNP
-                    var DNPString = thisNewUid.trim();
-                    DNPString = DNPString.slice(3, DNPString.length);
-                    if (DNPString.startsWith("+")) {
-                        DNPString = DNPString.slice(1, DNPString.length);
-                        var date = new Date(new Date().setDate(new Date().getDate() + parseInt(DNPString)));
-                    } else {
-                        DNPString = DNPString.slice(1, DNPString.length);
-                        var date = new Date(new Date().setDate(new Date().getDate() - parseInt(DNPString)));
+            }
+        }
+        if (definitions?.children.length > 0) {
+            for (var i = 0; i < definitions?.children.length; i++) {
+                if (definitions?.children[i]?.string == workspace)
+                    var thisDefinition = definitions?.children[i];
+            }
+        }
+
+        var leftSidebar = undefined;
+        var rightSidebar = undefined;
+        var mainString = undefined;
+        var rightSidebarContent = undefined;
+        var workspaceCSS = undefined;
+
+        if (thisDefinition.children.length > 0) {
+            for (var i = 0; i < thisDefinition.children.length; i++) {
+                if (thisDefinition.children[i].string.startsWith("Left Sidebar:")) {
+                    if (thisDefinition.children[i].hasOwnProperty("children")) {
+                        leftSidebar = thisDefinition.children[i]?.children[0]?.string;
                     }
-                    var dd = String(date.getDate()).padStart(2, '0');
-                    var mm = String(date.getMonth() + 1).padStart(2, '0');
-                    var yyyy = date.getFullYear();
-                    thisNewUid = mm + '-' + dd + '-' + yyyy;
-                    var titleDate = convertToRoamDate(thisNewUid);
-                    var page = await window.roamAlphaAPI.q(`
+                } else if (thisDefinition.children[i].string.startsWith("Right Sidebar:")) {
+                    if (thisDefinition.children[i].hasOwnProperty('children')) {
+                        rightSidebar = thisDefinition.children[i]?.children[0]?.string;
+                    }
+                } else if (thisDefinition.children[i].string.startsWith("Main Content:")) {
+                    if (thisDefinition.children[i].hasOwnProperty('children')) {
+                        mainString = thisDefinition.children[i]?.children[0]?.string;
+                    }
+                } else if (thisDefinition.children[i].string.startsWith("Right Sidebar Content:")) {
+                    if (thisDefinition.children[i].hasOwnProperty('children')) {
+                        rightSidebarContent = thisDefinition.children[i]?.children;
+                    }
+                } else if (thisDefinition.children[i].string.startsWith("Custom CSS:")) {
+                    if (thisDefinition.children[i].hasOwnProperty('children')) {
+                        if (thisDefinition.children[i].children[0].string.length > 0) {
+                            if (thisDefinition.children[i].children[0].string.startsWith("```css")) { // this is a CSS code block
+                                workspaceCSS = thisDefinition.children[i].children[0].string.substring(6).slice(0, -3);
+                            } else if (thisDefinition.children[i].children[0].string.startsWith("((")) { // this is a block references
+                                var blockRef = thisDefinition.children[i].children[0].string.substring(2).slice(0, -2);;
+                                var cssBlock = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid {:block/children ...} ]) :where [?page :block/uid "${blockRef}"] ]`);
+                                cssBlock = cssBlock[0][0].string;
+                                workspaceCSS = cssBlock.substring(6).slice(0, -3);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        var leftSidebarState;
+        if (document.querySelector('.rm-open-left-sidebar-btn')) {
+            leftSidebarState = "closed";
+        } else {
+            leftSidebarState = "open";
+        }
+
+        // set left sidebar open state, but only if it isn't already in that state
+        if (leftSidebar != undefined) {
+            if (leftSidebar == "closed" && leftSidebarState == "open") {
+                await roamAlphaAPI.ui.leftSidebar.close();
+            } else if (leftSidebar == "open" && leftSidebarState == "closed") {
+                await roamAlphaAPI.ui.leftSidebar.open();
+            }
+        }
+
+        // set main window content
+        if (mainString != undefined) {
+            if (mainString.trim() == "DNP") {
+                var today = new Date();
+                var dd = String(today.getDate()).padStart(2, '0');
+                var mm = String(today.getMonth() + 1).padStart(2, '0');
+                var yyyy = today.getFullYear();
+                var dateUID = mm + '-' + dd + '-' + yyyy;
+                await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: dateUID } });
+            } else if (mainString.startsWith("((")) {
+                mainString = mainString.slice(2, mainString.length);
+                mainString = mainString.slice(0, -2);
+                await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: mainString } });
+            } else if (mainString.startsWith("[[")) { // this is a page name not a uid
+                mainString = mainString.slice(2, mainString.length);
+                mainString = mainString.slice(0, -2);
+                let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "${mainString}"][?e :block/uid ?uid ] ]`);
+                await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: pageUID[0][0].toString() } });
+            } else {
+                await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: mainString } });
+            }
+        }
+
+        // remove any pre-existing right sidebar content
+        let rightSidebarWindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
+        if (rightSidebarWindows.length > 0) {
+            for (var i = 0; i < rightSidebarWindows.length; i++) {
+                window.roamAlphaAPI.ui.rightSidebar.removeWindow({ "window": { "type": rightSidebarWindows[i]['type'], "block-uid": rightSidebarWindows[i]['block-uid'] || rightSidebarWindows[i]['page-uid'] || rightSidebarWindows[i]['mentions-uid'] } }) // thanks to Matt Vogel and his Clear Right Sidebar extension as I couldn't quite get this to work as intended until looking at his code - used with permission
+            }
+        }
+
+        // get and create new right sidebar content
+        var descriptors = [];
+        if (rightSidebarContent != undefined) {
+            rightSidebarContent = await sortObjectsByOrder(rightSidebarContent);
+            for (var j = 0; j < rightSidebarContent.length; j++) {
+                if (rightSidebarContent[j]?.string.length > 0) {
+                    descriptors[j] = rightSidebarContent[j]?.string.split(",");
+                    var thisNewUid = descriptors[j][0]?.trim();
+
+                    // handle missing definitions for mode and collapsed state
+                    var thisNewState = descriptors[j][1]?.trim();
+                    if (thisNewState == null) {
+                        thisNewState = "outline"
+                    }
+                    var thisNewCollapsed = descriptors[j][2]?.trim();
+                    if (thisNewCollapsed == null) {
+                        thisNewCollapsed = "false"
+                    }
+                    // trim and (( )) from blockrefs
+                    if (thisNewUid.trim() == "DNP") { // today's DNP
+                        var today = new Date();
+                        var dd = String(today.getDate()).padStart(2, '0');
+                        var mm = String(today.getMonth() + 1).padStart(2, '0');
+                        var yyyy = today.getFullYear();
+                        thisNewUid = mm + '-' + dd + '-' + yyyy;
+                    } else if (thisNewUid.startsWith("DNP")) { // another DNP
+                        var DNPString = thisNewUid.trim();
+                        DNPString = DNPString.slice(3, DNPString.length);
+                        if (DNPString.startsWith("+")) {
+                            DNPString = DNPString.slice(1, DNPString.length);
+                            var date = new Date(new Date().setDate(new Date().getDate() + parseInt(DNPString)));
+                        } else {
+                            DNPString = DNPString.slice(1, DNPString.length);
+                            var date = new Date(new Date().setDate(new Date().getDate() - parseInt(DNPString)));
+                        }
+                        var dd = String(date.getDate()).padStart(2, '0');
+                        var mm = String(date.getMonth() + 1).padStart(2, '0');
+                        var yyyy = date.getFullYear();
+                        thisNewUid = mm + '-' + dd + '-' + yyyy;
+                        var titleDate = convertToRoamDate(thisNewUid);
+                        var page = await window.roamAlphaAPI.q(`
                     [:find ?e
                         :where [?e :node/title "${titleDate}"]]`);
-                    if (page.length < 1) { // create new page
-                        await window.roamAlphaAPI.createPage({ page: { title: titleDate, uid: thisNewUid } });
+                        if (page.length < 1) { // create new page
+                            await window.roamAlphaAPI.createPage({ page: { title: titleDate, uid: thisNewUid } });
+                        }
+                        var results = window.roamAlphaAPI.data.pull("[:block/children]", [":block/uid", thisNewUid]);
+                        if (results == null) {
+                            let newBlockUid = roamAlphaAPI.util.generateUID();
+                            await window.roamAlphaAPI.createBlock({ location: { "parent-uid": thisNewUid, order: 0 }, block: { string: "", uid: newBlockUid } });
+                        }
+                    } else if (thisNewUid.startsWith("((")) {
+                        thisNewUid = thisNewUid.slice(2, thisNewUid.length);
+                        thisNewUid = thisNewUid.slice(0, -2);
+                    } else if (thisNewUid.startsWith("[[")) { // this is a page name not a uid
+                        thisNewUid = thisNewUid.slice(2, thisNewUid.length);
+                        thisNewUid = thisNewUid.slice(0, -2);
+                        var newPage = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "${thisNewUid}"][?e :block/uid ?uid ] ]`);
+                        thisNewUid = newPage[0][0].toString();
                     }
-                    var results = window.roamAlphaAPI.data.pull("[:block/children]", [":block/uid", thisNewUid]);
-                    if (results == null) {
-                        let newBlockUid = roamAlphaAPI.util.generateUID();
-                        await window.roamAlphaAPI.createBlock({ location: { "parent-uid": thisNewUid, order: 0 }, block: { string: "", uid: newBlockUid } });
+                    // set right sidebar content
+                    await window.roamAlphaAPI.ui.rightSidebar.addWindow({ window: { type: thisNewState, 'block-uid': thisNewUid, order: j } });
+                    if (thisNewCollapsed == "true") {
+                        await window.roamAlphaAPI.ui.rightSidebar.collapseWindow({ window: { type: thisNewState, 'block-uid': thisNewUid } });
                     }
-                } else if (thisNewUid.startsWith("((")) {
-                    thisNewUid = thisNewUid.slice(2, thisNewUid.length);
-                    thisNewUid = thisNewUid.slice(0, -2);
-                } else if (thisNewUid.startsWith("[[")) { // this is a page name not a uid
-                    thisNewUid = thisNewUid.slice(2, thisNewUid.length);
-                    thisNewUid = thisNewUid.slice(0, -2);
-                    var newPage = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "${thisNewUid}"][?e :block/uid ?uid ] ]`);
-                    thisNewUid = newPage[0][0].toString();
-                }
-                // set right sidebar content
-                await window.roamAlphaAPI.ui.rightSidebar.addWindow({ window: { type: thisNewState, 'block-uid': thisNewUid, order: j } });
-                if (thisNewCollapsed == "true") {
-                    await window.roamAlphaAPI.ui.rightSidebar.collapseWindow({ window: { type: thisNewState, 'block-uid': thisNewUid } });
                 }
             }
         }
-    }
 
-    // set right sidebar open state
-    if (rightSidebar != undefined) {
-        if (rightSidebar == "closed") {
-            await roamAlphaAPI.ui.rightSidebar.close();
-        } else if (rightSidebar == "open") {
-            await roamAlphaAPI.ui.rightSidebar.open();
+        // set right sidebar open state
+        if (rightSidebar != undefined) {
+            if (rightSidebar == "closed") {
+                await roamAlphaAPI.ui.rightSidebar.close();
+            } else if (rightSidebar == "open") {
+                await roamAlphaAPI.ui.rightSidebar.open();
+            }
+        }
+
+        // remove and set any custom css
+        var head = document.getElementsByTagName("head")[0];
+        if (!document.getElementById("workspaces-css") && workspaceCSS != undefined && workspaceCSS != "place any custom css in this code block") { // no existing workspaces css is set and we need to set some
+            var style = document.createElement("style");
+            style.id = "workspaces-css";
+            style.textContent = workspaceCSS;
+            head.appendChild(style);
+        } else { // found existing workspaces css so remove before setting new if relevant
+            clearWorkspaceCSS();
+            if (workspaceCSS != undefined && workspaceCSS != "place any custom css in this code block") {
+                var newStyles = document.createElement("style");
+                newStyles.id = "workspaces-css";
+                newStyles.textContent = workspaceCSS;
+                head.appendChild(newStyles);
+            }
         }
     }
 }
 
-async function createBlock(string, uid, order) {
-    let newUid = roamAlphaAPI.util.generateUID();
-    await window.roamAlphaAPI.createBlock(
-        {
-            location: { "parent-uid": uid, order: order },
-            block: { string: string.toString(), uid: newUid }
-        });
-    return newUid;
+async function clearWorkspaceCSS() {
+    var head = document.getElementsByTagName("head")[0];
+    if (document.getElementById("workspaces-css")) {
+        var oldStyles = document.getElementById("workspaces-css");
+        head.removeChild(oldStyles);
+    }
 }
 
+// helper functions
 function convertToRoamDate(dateString) {
     var parsedDate = dateString.split('-');
     var year = parsedDate[2];
@@ -704,4 +779,14 @@ async function sortObjectsByOrder(o) {
     return o.sort(function (a, b) {
         return a.order - b.order;
     });
+}
+
+async function createBlock(string, uid, order) {
+    let newUid = roamAlphaAPI.util.generateUID();
+    await window.roamAlphaAPI.createBlock(
+        {
+            location: { "parent-uid": uid, order: order },
+            block: { string: string.toString(), uid: newUid }
+        });
+    return newUid;
 }
