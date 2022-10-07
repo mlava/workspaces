@@ -357,9 +357,14 @@ async function createWorkspace(autosaved, autoLabel) {
         }
     }
     var pageName = undefined;
-    pageName = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${thisPage}"] [?b :node/title ?title]]`);
-
-    let pageFilters = await window.roamAlphaAPI.ui.filters.getPageFilters({ "page": { "uid": thisPage } });
+    var pageFilters = undefined;
+    if (thisPage != "DNP") {
+        pageName = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${thisPage}"] [?b :node/title ?title]]`);
+        var pageFiltersTemp = await window.roamAlphaAPI.ui.filters.getPageFilters({ "page": { "uid": thisPage } });
+        if (pageFiltersTemp.includes.length > 0 || pageFiltersTemp.removes.length > 0) {
+            pageFilters = pageFiltersTemp;
+        }
+    }
 
     var RSwindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
     if (RSwindows) {
@@ -549,7 +554,7 @@ async function createWorkspace(autosaved, autoLabel) {
         }
         let ws_7 = "Keyboard Shortcut:";
         let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
-        await createBlock("a", ws_7v, 1);
+        await createBlock("", ws_7v, 1);
     }
 }
 
