@@ -122,11 +122,12 @@ export default {
         window.roamAlphaAPI.data.removePullWatch(
             "[:block/children :block/uid :block/string {:block/children ...}]",
             `[:block/uid "${pullBlock}"]`,
-            function a(before, after) { checkWorkspaces(); getKBShortcuts(); });
+            pullFunction);
 
         clearWorkspaceCSS();
     }
 }
+
 
 async function checkFirstRun() {
     var page = await window.roamAlphaAPI.q(`[:find (pull ?page [:block/string :block/uid {:block/children ...}]) :where [?page :node/title "Workspaces configuration"]  ]`);
@@ -189,17 +190,11 @@ async function checkFirstRun() {
     await window.roamAlphaAPI.data.removePullWatch(
         "[:block/children :block/uid :block/string {:block/children ...}]",
         `[:block/uid "${pullBlock}"]`,
-        function a(before, after) {
-            checkWorkspaces(before, after);
-            getKBShortcuts();
-        });
-    await window.roamAlphaAPI.data.addPullWatch(
-        "[:block/children :block/uid :block/string {:block/children ...}]",
-        `[:block/uid "${pullBlock}"]`,
-        function a(before, after) {
-            checkWorkspaces(before, after);
-            getKBShortcuts();
-        });
+        pullFunction);
+        await window.roamAlphaAPI.data.addPullWatch(
+            "[:block/children :block/uid :block/string {:block/children ...}]",
+            `[:block/uid "${pullBlock}"]`,
+            pullFunction);
 }
 
 async function checkWorkspaces(before, after) {
@@ -762,6 +757,11 @@ async function clearWorkspaceCSS() {
 }
 
 // helper functions
+function pullFunction(before, after) {
+    checkWorkspaces(before, after);
+    getKBShortcuts();
+}
+
 function convertToRoamDate(dateString) {
     var parsedDate = dateString.split('-');
     var year = parsedDate[2];
