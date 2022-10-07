@@ -1,10 +1,8 @@
 import iziToast from "izitoast";
 let keyEventHandler = undefined;
 var boundKEH = undefined;
-var keyUpEH = undefined;
 var kbDefinitions = [];
 var pullBlock = undefined
-var keyDownTrack = false;
 var auto = false;
 var checkInterval = 0;
 var checkEveryMinutes, autoLabel, autoMenu;
@@ -116,7 +114,6 @@ export default {
             document.getElementById("workspaces").remove();
         }
         window.removeEventListener('keydown', boundKEH);
-        //window.removeEventListener('keyup', keyUpEH);
         if (checkInterval > 0) clearInterval(checkInterval);
 
         window.roamAlphaAPI.data.removePullWatch(
@@ -127,7 +124,6 @@ export default {
         clearWorkspaceCSS();
     }
 }
-
 
 async function checkFirstRun() {
     var page = await window.roamAlphaAPI.q(`[:find (pull ?page [:block/string :block/uid {:block/children ...}]) :where [?page :node/title "Workspaces configuration"]  ]`);
@@ -191,10 +187,10 @@ async function checkFirstRun() {
         "[:block/children :block/uid :block/string {:block/children ...}]",
         `[:block/uid "${pullBlock}"]`,
         pullFunction);
-        await window.roamAlphaAPI.data.addPullWatch(
-            "[:block/children :block/uid :block/string {:block/children ...}]",
-            `[:block/uid "${pullBlock}"]`,
-            pullFunction);
+    await window.roamAlphaAPI.data.addPullWatch(
+        "[:block/children :block/uid :block/string {:block/children ...}]",
+        `[:block/uid "${pullBlock}"]`,
+        pullFunction);
 }
 
 async function checkWorkspaces(before, after) {
@@ -363,16 +359,21 @@ async function createWorkspace(autosaved, autoLabel) {
     var pageName = undefined;
     pageName = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${thisPage}"] [?b :node/title ?title]]`);
 
+    let pageFilters = await window.roamAlphaAPI.ui.filters.getPageFilters({ "page": { "uid": thisPage } });
+
     var RSwindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
     if (RSwindows) {
         var RSWList = [];
         for (var i = 0; i < RSwindows.length; i++) {
             if (RSwindows[i]['type'] == "block") {
-                RSWList.push({ "order": RSwindows[i]['order'], "type": RSwindows[i]['type'], "uid": RSwindows[i]['block-uid'], "collapsed": RSwindows[i]['collapsed?'] });
+                let RSWFilters = await window.roamAlphaAPI.ui.filters.getSidebarWindowFilters({ "window": { "block-uid": RSwindows[i]['block-uid'], "type": RSwindows[i]['type'] } });
+                RSWList.push({ "order": RSwindows[i]['order'], "type": RSwindows[i]['type'], "uid": RSwindows[i]['block-uid'], "collapsed": RSwindows[i]['collapsed?'], "filters": JSON.stringify(RSWFilters) });
             } else if (RSwindows[i].type == "mentions") {
-                RSWList.push({ "order": RSwindows[i]['order'], "type": RSwindows[i]['type'], "uid": RSwindows[i]['mentions-uid'], "collapsed": RSwindows[i]['collapsed?'] });
-            } else {
-                RSWList.push({ "order": RSwindows[i]['order'], "type": RSwindows[i]['type'], "uid": RSwindows[i]['page-uid'], "collapsed": RSwindows[i]['collapsed?'] });
+                let RSWFilters = await window.roamAlphaAPI.ui.filters.getSidebarWindowFilters({ "window": { "block-uid": RSwindows[i]['mentions-uid'], "type": RSwindows[i]['type'] } });
+                RSWList.push({ "order": RSwindows[i]['order'], "type": RSwindows[i]['type'], "uid": RSwindows[i]['mentions-uid'], "collapsed": RSwindows[i]['collapsed?'], "filters": JSON.stringify(RSWFilters) });
+            } else { // outline or graph
+                let RSWFilters = await window.roamAlphaAPI.ui.filters.getSidebarWindowFilters({ "window": { "block-uid": RSwindows[i]['page-uid'], "type": RSwindows[i]['type'] } });
+                RSWList.push({ "order": RSwindows[i]['order'], "type": RSwindows[i]['type'], "uid": RSwindows[i]['page-uid'], "collapsed": RSwindows[i]['collapsed?'], "filters": JSON.stringify(RSWFilters) });
             }
         }
     }
@@ -461,6 +462,9 @@ async function createWorkspace(autosaved, autoLabel) {
         let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
         if (pageName != undefined && pageName.length > 0) {
             await createBlock("[[" + pageName + "]]", ws_5v, 1);
+            if (pageFilters != undefined) {
+                await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
+            }
         } else {
             await createBlock(thisPage, ws_5v, 1);
         }
@@ -470,9 +474,11 @@ async function createWorkspace(autosaved, autoLabel) {
             for (var i = 0; i < RSWList.length; i++) {
                 if (RSWList[i].type == "outline") {
                     var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`);
-                    await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                    let RSWFdef = await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                    await createBlock(RSWList[i].filters, RSWFdef, 1);
                 } else {
-                    await createBlock("((" + RSWList[i].uid + "))," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                    let RSWFdef = await createBlock("((" + RSWList[i].uid + "))," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                    await createBlock(RSWList[i].filters, RSWFdef, 1);
                 }
             }
         }
@@ -521,6 +527,9 @@ async function createWorkspace(autosaved, autoLabel) {
         let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
         if (pageName != undefined && pageName.length > 0) {
             await createBlock("[[" + pageName + "]]", ws_5v, 1);
+            if (pageFilters != undefined) {
+                await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
+            }
         } else {
             await createBlock(thisPage, ws_5v, 1);
         }
@@ -530,9 +539,11 @@ async function createWorkspace(autosaved, autoLabel) {
             for (var i = 0; i < RSWList.length; i++) {
                 if (RSWList[i].type == "outline") {
                     var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`);
-                    await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                    let RSWFdef = await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                    await createBlock(RSWList[i].filters, RSWFdef, 1);
                 } else {
-                    await createBlock("((" + RSWList[i].uid + "))," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                    let RSWFdef = await createBlock("((" + RSWList[i].uid + "))," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                    await createBlock(RSWList[i].filters, RSWFdef, 1);
                 }
             }
         }
@@ -566,6 +577,7 @@ async function gotoWorkspace(workspace) {
         var leftSidebar = undefined;
         var rightSidebar = undefined;
         var mainString = undefined;
+        var mainFilters = undefined;
         var rightSidebarContent = undefined;
         var workspaceCSS = undefined;
 
@@ -582,6 +594,9 @@ async function gotoWorkspace(workspace) {
                 } else if (thisDefinition.children[i].string.startsWith("Main Content:")) {
                     if (thisDefinition.children[i].hasOwnProperty('children')) {
                         mainString = thisDefinition.children[i]?.children[0]?.string;
+                        if (thisDefinition.children[i].children.length > 1) {
+                            mainFilters = thisDefinition.children[i]?.children[1]?.string;
+                        }
                     }
                 } else if (thisDefinition.children[i].string.startsWith("Right Sidebar Content:")) {
                     if (thisDefinition.children[i].hasOwnProperty('children')) {
@@ -629,17 +644,29 @@ async function gotoWorkspace(workspace) {
                 var yyyy = today.getFullYear();
                 var dateUID = mm + '-' + dd + '-' + yyyy;
                 await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: dateUID } });
+                if (mainFilters != undefined) {
+                    await window.roamAlphaAPI.ui.filters.setPageFilters({ "page": { "uid": dateUID }, "filters": JSON.parse(mainFilters) })
+                }
             } else if (mainString.startsWith("((")) {
                 mainString = mainString.slice(2, mainString.length);
                 mainString = mainString.slice(0, -2);
                 await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: mainString } });
+                if (mainFilters != undefined) {
+                    await window.roamAlphaAPI.ui.filters.setPageFilters({ "page": { "uid": mainString }, "filters": JSON.parse(mainFilters) })
+                }
             } else if (mainString.startsWith("[[")) { // this is a page name not a uid
                 mainString = mainString.slice(2, mainString.length);
                 mainString = mainString.slice(0, -2);
                 let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "${mainString}"][?e :block/uid ?uid ] ]`);
                 await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: pageUID[0][0].toString() } });
+                if (mainFilters != undefined) {
+                    await window.roamAlphaAPI.ui.filters.setPageFilters({ "page": { "title": mainString }, "filters": JSON.parse(mainFilters) })
+                }
             } else {
                 await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: mainString } });
+                if (mainFilters != undefined) {
+                    await window.roamAlphaAPI.ui.filters.setPageFilters({ "page": { "uid": mainString }, "filters": JSON.parse(mainFilters) })
+                }
             }
         }
 
@@ -669,6 +696,12 @@ async function gotoWorkspace(workspace) {
                     if (thisNewCollapsed == null) {
                         thisNewCollapsed = "false"
                     }
+                    if (rightSidebarContent[j].hasOwnProperty("children")) {
+                        var thisNewFilters = rightSidebarContent[j].children[0].string.trim();
+                    } else {
+                        thisNewFilters = "false";
+                    }
+
                     // trim and (( )) from blockrefs
                     if (thisNewUid.trim() == "DNP") { // today's DNP
                         var today = new Date();
@@ -715,6 +748,9 @@ async function gotoWorkspace(workspace) {
                     await window.roamAlphaAPI.ui.rightSidebar.addWindow({ window: { type: thisNewState, 'block-uid': thisNewUid, order: j } });
                     if (thisNewCollapsed == "true") {
                         await window.roamAlphaAPI.ui.rightSidebar.collapseWindow({ window: { type: thisNewState, 'block-uid': thisNewUid } });
+                    }
+                    if (thisNewFilters != "false") {
+                        await window.roamAlphaAPI.ui.filters.setSidebarWindowFilters({ "window": { "block-uid": thisNewUid, "type": thisNewState }, "filters": JSON.parse(thisNewFilters) });
                     }
                 }
             }
