@@ -34,3 +34,12 @@ TODO:
 2. ~~auto-save feature for current workspace~~
 
 3. API to allow other extensions to interact with Workspaces
+
+This extension has been merged with the previous RoamJS extension Sidebar! The following features have been brought over while the rest were made redundant due to Workspaces current featureset:
+- `Autofocus` - Whenever you open the right sidebar, your cursor will autofocus on the first block. This behavior is toggleable from your Roam Depot Settings.
+- `Auto Filter` - Roam natively supports includes/removes filters on pages. Those filters are not saved however when you add the page to the sidebar. Opening a page in the sidebar will persist the filters from the page. This behavior is toggleable from your Roam Depot Settings.
+- `Go to Page` - Render a link button next to each page sidebar window to allow jumping directly to the page.
+- `Expand/Collapse All` - Render a button on the top bar of the right sidebar that will expand/collapse all on click. This behavior is toggleable from your Roam Depot Settings (requires refresh).
+- `Pinned open` - If your sidebar was open during your last Roam session, it will automatically open on load/reload.
+
+
