@@ -47,6 +47,10 @@ export default {
             label: "Create Workspace from current state",
             callback: () => createWorkspace(false, false, false)
         });
+        window.roamAlphaAPI.ui.commandPalette.addCommand({
+            label: "Update Workspace from current state",
+            callback: () => createWorkspace(false, false, true)
+        });
 
         checkFirstRun();
         checkWorkspaces();
@@ -109,6 +113,9 @@ export default {
     onunload: () => {
         window.roamAlphaAPI.ui.commandPalette.removeCommand({
             label: 'Create Workspace from current state'
+        });
+        window.roamAlphaAPI.ui.commandPalette.removeCommand({
+            label: 'Update Workspace from current state'
         });
         if (document.getElementById("workspaces")) {
             document.getElementById("workspaces").remove();
@@ -245,10 +252,17 @@ async function checkWorkspaces(before, after) {
                 div.append(span);
                 divParent.append(div);
 
-                var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
-                var topBarRow = topBarContent.childNodes[1];
-
-                if (topBarContent && topBarRow) {
+                if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
+                    console.info("found yesterday/today buttons");
+                    let todayTomorrow = document.querySelector("#todayTomorrow");
+                    todayTomorrow.after(divParent);
+                } else if (document.querySelector("span.bp3-button.bp3-minimal.bp3-icon-arrow-right.pointer.bp3-small.rm-electron-nav-forward-btn")) {
+                    console.info("electron");
+                    let electronArrows = document.getElementsByClassName("rm-electron-nav-forward-btn")[0];
+                    electronArrows.after(divParent);
+                } else {
+                    var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
+                    var topBarRow = topBarContent.childNodes[1];
                     topBarRow.parentNode.insertBefore(divParent, topBarRow);
                 }
                 document.getElementById("workspacesSelectMenu").addEventListener("change", () => {
@@ -334,7 +348,7 @@ async function getKBShortcuts() {
     console.info("Workspace keyboard Shortcuts updated");
 }
 
-async function createWorkspace(autosaved, autoLabel) {
+async function createWorkspace(autosaved, autoLabel, update) {
     // get required information to define a workspace
     var leftSidebarState, rightSidebarState;
     if (document.querySelector('.rm-open-left-sidebar-btn')) {
@@ -394,7 +408,42 @@ async function createWorkspace(autosaved, autoLabel) {
         }
     }
 
-    if (autosaved) {
+    if (update) {
+        var selectString = "<select><option value=\"\">Select</option>";
+        for (var j = 0; j < definitions.children.length; j++) {
+            if (!definitions.children[j].string.startsWith("* ")) {
+                selectString += "<option value=\"" + definitions.children[j].uid + "\">" + definitions.children[j].string + "</option>";
+            }
+        }
+        selectString += "</select>";
+        iziToast.question({
+            theme: 'light',
+            color: 'black',
+            layout: 2,
+            drag: false,
+            timeout: 20000,
+            close: false,
+            overlay: true,
+            title: 'Workspaces',
+            message: 'Which workspace do you want to update?',
+            position: 'center',
+            inputs: [
+                [selectString, 'change', function (instance, toast, select, e) { }]
+            ],
+            buttons: [
+                ['<button><b>Confirm</b></button>', function (instance, toast, button, e, inputs) {
+                    updateWS(inputs[0].options[inputs[0].selectedIndex].value);
+                    instance.hide({ transitionOut: 'fadeOut' }, toast, 'button');
+                }, false], // true to focus
+                [
+                    "<button>Cancel</button>",
+                    function (instance, toast, button, e) {
+                        instance.hide({ transitionOut: "fadeOut" }, toast, "button");
+                    },
+                ],
+            ]
+        });
+    } else if (autosaved) {
         updateAutoWS(autoLabel);
     } else {
         iziToast.question({
@@ -493,6 +542,61 @@ async function createWorkspace(autosaved, autoLabel) {
         let ws_8 = "Custom CSS:";
         let ws_8v = await createBlock(ws_8, secHeaderUID, 5);
         await createBlock("```css\nplace any custom css in this code block```", ws_8v, 1);
+    }
+
+    async function updateWS(secHeaderUID) {
+        console.info("Updating workspace");
+        // update workspace definition to Workspaces configuration page
+        var order;
+
+        if (definitions.hasOwnProperty("children")) {
+            order = 1 + (definitions.children.length);
+            for (var i = 0; i < definitions.children.length; i++) {
+                if (definitions.children[i].uid == secHeaderUID) {
+                    if (definitions.children[i].hasOwnProperty("children")) {
+                        for (var j = 0; j < definitions.children[i].children.length; j++) {
+                            window.roamAlphaAPI.deleteBlock({ "block": { "uid": definitions.children[i].children[j].uid } })
+                        }
+                    }
+                }
+            }
+        } else {
+            order = 1;
+        }
+
+        let ws_3 = "Left Sidebar:";
+        let ws_3v = await createBlock(ws_3, secHeaderUID, 0);
+        await createBlock(leftSidebarState, ws_3v, 1);
+        let ws_4 = "Right Sidebar:";
+        let ws_4v = await createBlock(ws_4, secHeaderUID, 1);
+        await createBlock(rightSidebarState, ws_4v, 1);
+        let ws_5 = "Main Content:";
+        let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
+        if (pageName != undefined && pageName.length > 0) {
+            await createBlock("[[" + pageName + "]]", ws_5v, 1);
+            if (pageFilters != undefined) {
+                await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
+            }
+        } else {
+            await createBlock(thisPage, ws_5v, 1);
+        }
+        let ws_6 = "Right Sidebar Content:";
+        let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
+        if (RSWList.length > 0) {
+            for (var i = 0; i < RSWList.length; i++) {
+                if (RSWList[i].type == "outline") {
+                    var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`);
+                    let RSWFdef = await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                    await createBlock(RSWList[i].filters, RSWFdef, 1);
+                } else {
+                    let RSWFdef = await createBlock("((" + RSWList[i].uid + "))," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                    await createBlock(RSWList[i].filters, RSWFdef, 1);
+                }
+            }
+        }
+        let ws_7 = "Keyboard Shortcut:";
+        let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
+        await createBlock("", ws_7v, 1);
     }
 
     async function updateAutoWS(autoLabel) {
