@@ -1,6 +1,7 @@
 Create workspaces that you can automatically open with the click of a button.
 
 **New:**
+- Update workspace definitions from a current state. Trigger via the Command Palette. This allows you to overwrite your workspace definition if you change how you want things laid out.
 - From version 6, changes to workspace definitions are dynamically updated and you no longer need to reload the extension to make them work. This also applies to keyboard shortcut definitions which have previously been tricky to get working.
 - First release featuring autosave functionality. Set an interval and this extension will automatically save your workspace at that interval, within your Workspace definitions. This makes it easy to go back if you suffered a crash or some other disaster.
 - Custom CSS. Apply CSS styling when you open a workspace. You can either place the CSS in a CSS code block or use a block ref to any css block on your graph.
