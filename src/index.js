@@ -1,4 +1,5 @@
 import iziToast from "izitoast";
+import initializeRoamJSSidebarFeatures from "./sidebar";
 let keyEventHandler = undefined;
 var boundKEH = undefined;
 var kbDefinitions = [];
@@ -39,6 +40,30 @@ export default {
                     description: "Include autosave workspace in Workspaces dropdown",
                     action: { type: "switch" },
                 },*/
+                {
+                    id: "ws-auto-focus",
+                    name: "Autofocus Sidebar",
+                    description: "Whether or not the sidebar should be automatically focused upon opening.",
+                    action: { type: "switch" },
+                },
+                {
+                    id: "ws-auto-filter",
+                    name: "Autofilter Sidebar",
+                    description: "Whether or not the sidebar filters should match the corresponding page's filter.",
+                    action: { type: "switch" },
+                },
+                {
+                    id: "ws-go-to-page",
+                    name: "Go to Page Links",
+                    description: "Whether or not to show go to page links from Page sidebar windows",
+                    action: { type: "switch" },
+                },
+                {
+                    id: "ws-exp-col",
+                    name: "Expand/Collapse All Button",
+                    description: "Whether or not to display the expand/collapse all windows button on the top of the sidebar",
+                    action: { type: "switch" },
+                },
             ]
         };
         extensionAPI.settings.panel.create(config);
@@ -109,23 +134,25 @@ export default {
             addWorkspaceOpenedWatch: addWorkspaceOpenedWatch,
             removeWorkspaceOpenedWatch: removeWorkspaceOpenedWatch,
         }*/
-    },
-    onunload: () => {
-        window.roamAlphaAPI.ui.commandPalette.removeCommand({
-            label: 'Create Workspace from current state'
-        });
-        if (document.getElementById("workspaces")) {
-            document.getElementById("workspaces").remove();
+        const unloadRoamJSSidebarFeatures = initializeRoamJSSidebarFeatures(extensionAPI);
+        return () => {
+            unloadRoamJSSidebarFeatures();
+            window.roamAlphaAPI.ui.commandPalette.removeCommand({
+                label: 'Create Workspace from current state'
+            });
+            if (document.getElementById("workspaces")) {
+                document.getElementById("workspaces").remove();
+            }
+            window.removeEventListener('keydown', boundKEH);
+            if (checkInterval > 0) clearInterval(checkInterval);
+
+            window.roamAlphaAPI.data.removePullWatch(
+                "[:block/children :block/uid :block/string {:block/children ...}]",
+                `[:block/uid "${pullBlock}"]`,
+                pullFunction);
+
+            clearWorkspaceCSS();
         }
-        window.removeEventListener('keydown', boundKEH);
-        if (checkInterval > 0) clearInterval(checkInterval);
-
-        window.roamAlphaAPI.data.removePullWatch(
-            "[:block/children :block/uid :block/string {:block/children ...}]",
-            `[:block/uid "${pullBlock}"]`,
-            pullFunction);
-
-        clearWorkspaceCSS();
     }
 }
 
