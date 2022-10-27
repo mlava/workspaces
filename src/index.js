@@ -140,6 +140,9 @@ export default {
             window.roamAlphaAPI.ui.commandPalette.removeCommand({
                 label: 'Create Workspace from current state'
             });
+            window.roamAlphaAPI.ui.commandPalette.removeCommand({
+                label: 'Update Workspace from current state'
+            });
             if (document.getElementById("workspaces")) {
                 document.getElementById("workspaces").remove();
             }
