@@ -409,14 +409,15 @@ async function createWorkspace(autosaved, autoLabel, update) {
 
     var RSwindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
     if (RSwindows) {
+        console.info(RSwindows);
         var RSWList = [];
         for (var i = 0; i < RSwindows.length; i++) {
             if (RSwindows[i]['type'] == "block") {
                 let RSWFilters = await window.roamAlphaAPI.ui.filters.getSidebarWindowFilters({ "window": { "block-uid": RSwindows[i]['block-uid'], "type": RSwindows[i]['type'] } });
                 RSWList.push({ "order": RSwindows[i]['order'], "type": RSwindows[i]['type'], "uid": RSwindows[i]['block-uid'], "collapsed": RSwindows[i]['collapsed?'], "filters": JSON.stringify(RSWFilters) });
             } else if (RSwindows[i].type == "mentions") {
-                let RSWFilters = await window.roamAlphaAPI.ui.filters.getSidebarWindowFilters({ "window": { "block-uid": RSwindows[i]['mentions-uid'], "type": RSwindows[i]['type'] } });
-                RSWList.push({ "order": RSwindows[i]['order'], "type": RSwindows[i]['type'], "uid": RSwindows[i]['mentions-uid'], "collapsed": RSwindows[i]['collapsed?'], "filters": JSON.stringify(RSWFilters) });
+                let RSWFilters = await window.roamAlphaAPI.ui.filters.getSidebarWindowFilters({ "window": { "block-uid": RSwindows[i]['page-uid'], "type": RSwindows[i]['type'] } });
+                RSWList.push({ "order": RSwindows[i]['order'], "type": RSwindows[i]['type'], "uid": RSwindows[i]['page-uid'], "collapsed": RSwindows[i]['collapsed?'], "filters": JSON.stringify(RSWFilters) });
             } else { // outline or graph
                 let RSWFilters = await window.roamAlphaAPI.ui.filters.getSidebarWindowFilters({ "window": { "block-uid": RSwindows[i]['page-uid'], "type": RSwindows[i]['type'] } });
                 RSWList.push({ "order": RSwindows[i]['order'], "type": RSwindows[i]['type'], "uid": RSwindows[i]['page-uid'], "collapsed": RSwindows[i]['collapsed?'], "filters": JSON.stringify(RSWFilters) });
