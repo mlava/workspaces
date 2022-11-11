@@ -71,7 +71,15 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
       const rightSidebarTopbar =
         rightSidebar.getElementsByClassName("bp3-icon-menu-open")?.[0]
           ?.parentElement?.parentElement?.firstElementChild;
-      if (rightSidebarTopbar && extensionAPI.settings.get("ws-exp-col")) {
+      if (
+        rightSidebarTopbar &&
+        extensionAPI.settings.get("ws-exp-col") &&
+        !rightSidebarTopbar.hasAttribute("data-roamjs-sidebar-expcolall")
+      ) {
+        rightSidebarTopbar.setAttribute(
+          "data-roamjs-sidebar-expcolall",
+          "true"
+        );
         const expandCollapseContainer = document.createElement("span");
         renderIcon({
           p: expandCollapseContainer,
@@ -220,7 +228,8 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
             if (pageUid) {
               const linkIconContainer = document.createElement("span");
               const h = d.getElementsByClassName("rm-title-display")[order];
-              if (h) {
+              if (h && !h.hasAttribute("data-roamjs-sidebar-link")) {
+                h.setAttribute("data-roamjs-sidebar-link", "true");
                 h.addEventListener("mousedown", (e) => {
                   if (linkIconContainer.contains(e.target)) {
                     e.stopPropagation();
@@ -242,6 +251,82 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
     },
   });
   unloads.add(() => sidebarOutlineObserver.disconnect());
+
+  const legacyConfigUid = window.roamAlphaAPI.pull("[:block/uid]", [
+    ":node/title",
+    "roam/js/sidebar",
+  ])?.[":block/uid"];
+  if (legacyConfigUid) {
+    window.roamAlphaAPI.ui.commandPalette.addCommand({
+      label: "Migrate Legacy Sidebar Configs",
+      callback: () => {
+        const tree = window.roamAlphaAPI.pull(
+          "[:block/uid :block/string {:block/children ...}]",
+          [":node/title", "roam/js/sidebar"]
+        );
+        const savedNode = (tree?.[":block/children"] || []).find((t) =>
+          /saved/i.test(t[":block/string"])
+        );
+        if (savedNode) {
+          const oldSidebars = savedNode?.[":block/children"] || [];
+          const newConfig = window.roamAlphaAPI.pull(
+            "[:block/uid :block/string {:block/children ...}]",
+            [":node/title", "Workspaces configuration"]
+          );
+          const definitions = (newConfig?.[":block/children"] || []).find((n) =>
+            /Workspace Definitions:/i.test(n[":block/string"])
+          );
+          const base = (definitions?.[":block/children"] || []).length;
+          oldSidebars.forEach(async (sidebar, order) => {
+            await window.roamAlphaAPI.moveBlock({
+              location: {
+                "parent-uid": definitions[":block/uid"],
+                order: base + order,
+              },
+              block: { uid: sidebar[":block/uid"] },
+            });
+            const rightSidebarContent = window.roamAlphaAPI.util.generateUID();
+            await window.roamAlphaAPI.createBlock({
+              location: {
+                "parent-uid": sidebar[":block/uid"],
+                order: 0,
+              },
+              block: {
+                string: `Right Sidebar Content:`,
+                uid: rightSidebarContent,
+              },
+            });
+            (sidebar[":block/children"] || []).forEach(async (wndow, order) => {
+              const ref = wndow[":block/children"]?.[0]?.[":block/string"];
+              const type = wndow[":block/string"];
+              await window.roamAlphaAPI.moveBlock({
+                location: {
+                  "parent-uid": rightSidebarContent,
+                  order,
+                },
+                block: { uid: wndow[":block/uid"] },
+              });
+              await window.roamAlphaAPI.updateBlock({
+                block: {
+                  uid: wndow[":block/uid"],
+                  string: `((${ref})),${type}`,
+                },
+              });
+              await window.roamAlphaAPI.updateBlock({
+                block: {
+                  uid: wndow[":block/children"]?.[0]?.[":block/uid"],
+                  string: `{"includes":[],"removes":[]}`,
+                },
+              });
+            });
+          });
+        }
+        window.roamAlphaAPI.updatePage({
+          page: { uid: legacyConfigUid, title: "legacy/roam/js/sidebar" },
+        });
+      },
+    });
+  }
 
   return () => {
     unloads.forEach((u) => u());
