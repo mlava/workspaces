@@ -104,9 +104,7 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
           */
           },
           onToggleClick: () => {
-            rightSidebar.querySelectorAll <
-              HTMLSpanElement >
-              ".rm-sidebar-window .window-headers .rm-caret-closed".forEach(
+            rightSidebar.querySelectorAll(".rm-sidebar-window .window-headers .rm-caret-closed").forEach(
                 (e) => e.click()
               );
             /* Roam has a bug for non block windows
