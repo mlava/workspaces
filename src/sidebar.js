@@ -219,35 +219,37 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
     tag: "DIV",
     className: "rm-sidebar-outline",
     callback: (d) => {
-      if (extensionAPI.settings.get("ws-go-to-page"))
-        window.roamAlphaAPI.ui.rightSidebar
-          .getWindows()
-          .filter((w) => w.type === "outline")
-          .forEach((w, order) => {
-            const pageUid = w["page-uid"];
-            if (pageUid) {
-              const linkIconContainer = document.createElement("span");
-              const h = d.getElementsByClassName("rm-title-display")[order];
-              if (h && !h.hasAttribute("data-roamjs-sidebar-link")) {
-                h.setAttribute("data-roamjs-sidebar-link", "true");
-                h.addEventListener("mousedown", (e) => {
-                  if (linkIconContainer.contains(e.target)) {
-                    e.stopPropagation();
-                  }
-                });
-                renderIcon({
-                  p: linkIconContainer,
-                  tooltipContent: "Go to page",
-                  onClick: () =>
-                    window.roamAlphaAPI.ui.mainWindow.openPage({
-                      page: { uid: pageUid },
-                    }),
-                  icon: "link",
-                });
-                h.appendChild(linkIconContainer);
+      if (extensionAPI.settings.get("ws-go-to-page")) {
+        const allWindows = window.roamAlphaAPI.ui.rightSidebar.getWindows();
+        const allDomWindows = Array.from(
+          document.querySelectorAll(".rm-sidebar-window")
+        );
+        const order = allDomWindows.indexOf(d.closest(".rm-sidebar-window"));
+        const w = allWindows[order];
+        const pageUid = w["page-uid"];
+        if (pageUid) {
+          const linkIconContainer = document.createElement("span");
+          const h = d.querySelector("h1.rm-title-display");
+          if (h && !h.hasAttribute("data-roamjs-sidebar-link")) {
+            h.setAttribute("data-roamjs-sidebar-link", "true");
+            h.addEventListener("mousedown", (e) => {
+              if (linkIconContainer.contains(e.target)) {
+                e.stopPropagation();
               }
-            }
-          });
+            });
+            renderIcon({
+              p: linkIconContainer,
+              tooltipContent: "Go to page",
+              onClick: () =>
+                window.roamAlphaAPI.ui.mainWindow.openPage({
+                  page: { uid: pageUid },
+                }),
+              icon: "link",
+            });
+            h.appendChild(linkIconContainer);
+          }
+        }
+      }
     },
   });
   unloads.add(() => sidebarOutlineObserver.disconnect());
