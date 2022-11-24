@@ -1,6 +1,7 @@
 Create workspaces that you can automatically open with the click of a button.
 
 **New:**
+- Addition of Autopin option - if switched on, any block or page added to the Right Sidebar will be automatically pinned.
 - David Vargas has merged his Sidebar roamjs.com extension into Workspaces. For details, see below. Thanks David!
 - Update workspace definitions from a current state. Trigger via the Command Palette. This allows you to overwrite your workspace definition if you change how you want things laid out.
 
