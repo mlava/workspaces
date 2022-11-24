@@ -53,6 +53,12 @@ export default {
                     action: { type: "switch" },
                 },
                 {
+                    id: "ws-auto-pin",
+                    name: "Autopin Sidebar",
+                    description: "Whether or not new sidebar windows should be automatically pinned.",
+                    action: { type: "switch" },
+                },
+                {
                     id: "ws-go-to-page",
                     name: "Go to Page Links",
                     description: "Whether or not to show go to page links from Page sidebar windows",

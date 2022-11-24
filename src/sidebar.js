@@ -187,8 +187,9 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
     className: "rm-sidebar-window",
     callback: (d) => {
       if (
-        extensionAPI.settings.get("ws-auto-filter") &&
-        /^Outline of:/.test(d.firstElementChild.innerText)
+        (extensionAPI.settings.get("ws-auto-filter") &&
+        /^Outline of:/.test(d.firstElementChild.innerText)) || (extensionAPI.settings.get("ws-auto-pin") &&
+        /^Outline of:/.test(d.firstElementChild.innerText))
       ) {
         const order = Array.from(
           d.parentElement.parentElement.children
@@ -196,6 +197,13 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
         const sidebarWindow = window.roamAlphaAPI.ui.rightSidebar
           .getWindows()
           .find((w) => w.order === order);
+        if (extensionAPI.settings.get("ws-auto-pin")) {
+          window.roamAlphaAPI.ui.rightSidebar.pinWindow({
+            window: {
+              type: sidebarWindow.type,
+              "block-uid": sidebarWindow["page-uid"],
+            }});
+        }
         const filters = window.roamAlphaAPI.ui.filters.getPageFilters({
           page: { uid: getWindowUid(sidebarWindow) },
         });
