@@ -5,8 +5,10 @@ var boundKEH = undefined;
 var kbDefinitions = [];
 var pullBlock = undefined
 var auto = false;
+let observer = undefined;
 var checkInterval = 0;
 var checkEveryMinutes, autoLabel, autoMenu;
+var leftSidebarStateCSS;
 
 export default {
     onload: ({ extensionAPI }) => {
@@ -82,6 +84,31 @@ export default {
             label: "Update Workspace from current state",
             callback: () => createWorkspace(false, false, true)
         });
+
+        async function initiateObserver() {
+            const targetNode1 = document.getElementsByClassName("rm-topbar")[0];
+            const config = { attributes: false, childList: true, subtree: true };
+            const callback = function (mutationsList, observer) {
+                for (const mutation of mutationsList) {
+                    if (mutation.addedNodes[0]) {
+                        for (var i = 0; i < mutation.addedNodes[0]?.classList.length; i++) {
+                            if (mutation.addedNodes[0]?.classList[i] == "rm-open-left-sidebar-btn") { // left sidebar has been closed
+                                checkWorkspaces();
+                            }
+                        }
+                    } else if (mutation.removedNodes[0]) {
+                        for (var i = 0; i < mutation.removedNodes[0]?.classList.length; i++) {
+                            if (mutation.removedNodes[0]?.classList[i] == "rm-open-left-sidebar-btn") { // left sidebar has been opened
+                                checkWorkspaces();
+                            }
+                        }
+                    }
+                }
+            };
+            observer = new MutationObserver(callback);
+            observer.observe(targetNode1, config);
+        }
+        initiateObserver();
 
         checkFirstRun();
         checkWorkspaces();
@@ -159,7 +186,7 @@ export default {
                 "[:block/children :block/uid :block/string {:block/children ...}]",
                 `[:block/uid "${pullBlock}"]`,
                 pullFunction);
-
+            observer.disconnect();
             clearWorkspaceCSS();
         }
     }
@@ -285,19 +312,31 @@ async function checkWorkspaces(before, after) {
                 div.append(span);
                 divParent.append(div);
 
-                if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
-                    console.info("found yesterday/today buttons");
-                    let todayTomorrow = document.querySelector("#todayTomorrow");
-                    todayTomorrow.after(divParent);
-                } else if (document.querySelector("span.bp3-button.bp3-minimal.bp3-icon-arrow-right.pointer.bp3-small.rm-electron-nav-forward-btn")) {
-                    console.info("electron");
-                    let electronArrows = document.getElementsByClassName("rm-electron-nav-forward-btn")[0];
-                    electronArrows.after(divParent);
+                if (document.querySelector(".rm-open-left-sidebar-btn")) { // the sidebar is closed
+                    if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
+                        let todayTomorrow = document.querySelector("#todayTomorrow");
+                        todayTomorrow.after(divParent);
+                    } else if (document.querySelector("span.bp3-button.bp3-minimal.bp3-icon-arrow-right.pointer.bp3-small.rm-electron-nav-forward-btn")) { // electron client needs separate css
+                        let electronArrows = document.getElementsByClassName("rm-electron-nav-forward-btn")[0];
+                        electronArrows.after(divParent);
+                    } else {
+                        let sidebarButton = document.querySelector(".rm-open-left-sidebar-btn");
+                        sidebarButton.after(divParent);
+                    }
                 } else {
-                    var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
-                    var topBarRow = topBarContent.childNodes[1];
-                    topBarRow.parentNode.insertBefore(divParent, topBarRow);
+                    if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
+                        let todayTomorrow = document.querySelector("#todayTomorrow");
+                        todayTomorrow.after(divParent);
+                    } else if (document.querySelector("span.bp3-button.bp3-minimal.bp3-icon-arrow-right.pointer.bp3-small.rm-electron-nav-forward-btn")) { // electron client needs separate css
+                        let electronArrows = document.getElementsByClassName("rm-electron-nav-forward-btn")[0];
+                        electronArrows.after(divParent);
+                    } else {
+                        var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
+                        var topBarRow = topBarContent.childNodes[1];
+                        topBarRow.parentNode.insertBefore(divParent, topBarRow);
+                    }
                 }
+
                 document.getElementById("workspacesSelectMenu").addEventListener("change", () => {
                     if (document.getElementById("workspacesSelectMenu").value != "null") {
                         gotoWorkspace(document.getElementById("workspacesSelectMenu").value);
@@ -415,7 +454,6 @@ async function createWorkspace(autosaved, autoLabel, update) {
 
     var RSwindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
     if (RSwindows) {
-        console.info(RSwindows);
         var RSWList = [];
         for (var i = 0; i < RSwindows.length; i++) {
             if (RSwindows[i]['type'] == "block") {
