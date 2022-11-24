@@ -23,8 +23,8 @@ const getWindowUid = (w) =>
   w.type === "outline"
     ? w["page-uid"]
     : w.type === "mentions"
-    ? w["mentions-uid"]
-    : w["block-uid"];
+      ? w["mentions-uid"]
+      : w["block-uid"];
 
 const MinimalIcon = ({
   toggleIcon,
@@ -105,8 +105,8 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
           },
           onToggleClick: () => {
             rightSidebar.querySelectorAll(".rm-sidebar-window .window-headers .rm-caret-closed").forEach(
-                (e) => e.click()
-              );
+              (e) => e.click()
+            );
             /* Roam has a bug for non block windows
           window.roamAlphaAPI.ui.rightSidebar.getWindows().forEach((w) => {
             window.roamAlphaAPI.ui.rightSidebar.expandWindow({
@@ -166,8 +166,8 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
         n.id === "right-sidebar"
           ? [n]
           : n.querySelectorAll
-          ? Array.from(n.querySelectorAll("#right-sidebar"))
-          : []
+            ? Array.from(n.querySelectorAll("#right-sidebar"))
+            : []
       )
     );
     if (!!rightSidebar) {
@@ -188,8 +188,7 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
     callback: (d) => {
       if (
         (extensionAPI.settings.get("ws-auto-filter") &&
-        /^Outline of:/.test(d.firstElementChild.innerText)) || (extensionAPI.settings.get("ws-auto-pin") &&
-        /^Outline of:/.test(d.firstElementChild.innerText))
+          /^Outline of:/.test(d.firstElementChild.innerText)) || (extensionAPI.settings.get("ws-auto-pin"))
       ) {
         const order = Array.from(
           d.parentElement.parentElement.children
@@ -198,11 +197,21 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
           .getWindows()
           .find((w) => w.order === order);
         if (extensionAPI.settings.get("ws-auto-pin")) {
-          window.roamAlphaAPI.ui.rightSidebar.pinWindow({
-            window: {
-              type: sidebarWindow.type,
-              "block-uid": sidebarWindow["page-uid"],
-            }});
+          if (sidebarWindow.type == "block") {
+            window.roamAlphaAPI.ui.rightSidebar.pinWindow({
+              window: {
+                type: sidebarWindow.type,
+                "block-uid": sidebarWindow["block-uid"],
+              }
+            });
+          } else {
+            window.roamAlphaAPI.ui.rightSidebar.pinWindow({
+              window: {
+                type: sidebarWindow.type,
+                "block-uid": sidebarWindow["page-uid"],
+              }
+            });
+          }
         }
         const filters = window.roamAlphaAPI.ui.filters.getPageFilters({
           page: { uid: getWindowUid(sidebarWindow) },
