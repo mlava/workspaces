@@ -313,6 +313,7 @@ async function checkWorkspaces(before, after) {
                 divParent.append(div);
 
                 if (document.querySelector(".rm-open-left-sidebar-btn")) { // the sidebar is closed
+                    await sleep(20);
                     if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
                         let todayTomorrow = document.querySelector("#todayTomorrow");
                         todayTomorrow.after(divParent);
@@ -324,6 +325,7 @@ async function checkWorkspaces(before, after) {
                         sidebarButton.after(divParent);
                     }
                 } else {
+                    await sleep(20);
                     if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
                         let todayTomorrow = document.querySelector("#todayTomorrow");
                         todayTomorrow.after(divParent);
@@ -1006,4 +1008,8 @@ async function createBlock(string, uid, order) {
             block: { string: string.toString(), uid: newUid }
         });
     return newUid;
+}
+
+async function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
