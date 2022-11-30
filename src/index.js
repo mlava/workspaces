@@ -3,7 +3,7 @@ import initializeRoamJSSidebarFeatures from "./sidebar";
 let keyEventHandler = undefined;
 var boundKEH = undefined;
 var kbDefinitions = [];
-var pullBlock = undefined
+var pullBlock = undefined;
 var auto = false;
 let observer = undefined;
 var checkInterval = 0;
@@ -303,14 +303,20 @@ async function checkWorkspaces(before, after) {
                 div.id = "workspacesSelect";
                 var span = document.createElement('span');
                 span.classList.add('bp3-button', 'bp3-minimal', 'bp3-small', 'bp3-icon-folder-shared-open');
+                /*
                 var selectString = "<select name=\"workspacesSelectMenu\" id=\"workspacesSelectMenu\"><option value=\"null\">Select...</option>";
                 for (var j = 0; j < definitions.children.length; j++) {
                     selectString += "<option value=\"" + definitions.children[j].string + "\">" + definitions.children[j].string + "</option>";
                 }
                 selectString += "<option value=\"clearWorkspacesCSS\">Clear CSS</option></select>";
                 span.innerHTML = selectString;
+                */
                 div.append(span);
                 divParent.append(div);
+
+                div.addEventListener('click', function () {
+                    workspaceSelect();
+                });
 
                 if (document.querySelector(".rm-open-left-sidebar-btn")) { // the sidebar is closed
                     await sleep(20);
@@ -338,12 +344,13 @@ async function checkWorkspaces(before, after) {
                         topBarRow.parentNode.insertBefore(divParent, topBarRow);
                     }
                 }
-
+                /*
                 document.getElementById("workspacesSelectMenu").addEventListener("change", () => {
                     if (document.getElementById("workspacesSelectMenu").value != "null") {
                         gotoWorkspace(document.getElementById("workspacesSelectMenu").value);
                     }
                 });
+                */
             }
             /* // experimenting only at the minute
             var wsName = definitions.children[i].string;
@@ -366,7 +373,7 @@ async function checkWorkspaces(before, after) {
             div.id = definitions?.children[0].string;
             var span = document.createElement('span');
             span.classList.add('bp3-button', 'bp3-minimal', 'bp3-small', 'bp3-icon-folder-shared-open');
-            span.innerHTML = definitions.children[0].string;
+            //span.innerHTML = definitions.children[0].string;
             div.append(span);
             divParent.append(div);
 
@@ -377,11 +384,83 @@ async function checkWorkspaces(before, after) {
                 topBarRow.parentNode.insertBefore(divParent, topBarRow);
             }
             div.addEventListener('click', function () {
-                gotoWorkspace(span.innerHTML);
+                gotoWorkspace(definitions.children[0].string);
             });
+            if (document.querySelector(".rm-open-left-sidebar-btn")) { // the sidebar is closed
+                await sleep(20);
+                if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
+                    let todayTomorrow = document.querySelector("#todayTomorrow");
+                    todayTomorrow.after(divParent);
+                } else if (document.querySelector("span.bp3-button.bp3-minimal.bp3-icon-arrow-right.pointer.bp3-small.rm-electron-nav-forward-btn")) { // electron client needs separate css
+                    let electronArrows = document.getElementsByClassName("rm-electron-nav-forward-btn")[0];
+                    electronArrows.after(divParent);
+                } else {
+                    let sidebarButton = document.querySelector(".rm-open-left-sidebar-btn");
+                    sidebarButton.after(divParent);
+                }
+            } else {
+                await sleep(20);
+                if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
+                    let todayTomorrow = document.querySelector("#todayTomorrow");
+                    todayTomorrow.after(divParent);
+                } else if (document.querySelector("span.bp3-button.bp3-minimal.bp3-icon-arrow-right.pointer.bp3-small.rm-electron-nav-forward-btn")) { // electron client needs separate css
+                    let electronArrows = document.getElementsByClassName("rm-electron-nav-forward-btn")[0];
+                    electronArrows.after(divParent);
+                } else {
+                    var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
+                    var topBarRow = topBarContent.childNodes[1];
+                    topBarRow.parentNode.insertBefore(divParent, topBarRow);
+                }
+            }
         }
     }
     console.info("Workspace definitions updated");
+}
+
+async function workspaceSelect() {
+    let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
+    var results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid :block/order {:block/children ...} ]) :where [?page :block/uid "${pageUID}"] ]`);
+    if (results[0][0].hasOwnProperty("children") && results[0][0]?.children.length > 0) {
+        for (var i = 0; i < results[0][0].children.length; i++) {
+            if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
+                var definitions = results[0][0]?.children[i];
+            }
+        }
+    }
+    definitions.children = await sortObjectsByOrder(definitions.children); // sort by order
+    console.info(definitions.children);
+    var selectString = "<select><option value=\"\">Select</option>";
+    for (var j = 0; j < definitions.children.length; j++) {
+        selectString += "<option value=\"" + definitions.children[j].string + "\">" + definitions.children[j].string + "</option>";
+    }
+    selectString += "</select>";
+    iziToast.question({
+        theme: 'light',
+        color: 'black',
+        layout: 2,
+        drag: false,
+        timeout: false,
+        close: false,
+        overlay: true,
+        title: 'Workspaces',
+        message: 'Which workspace do you want to open?',
+        position: 'center',
+        inputs: [
+            [selectString, 'change', function (instance, toast, select, e) { }]
+        ],
+        buttons: [
+            ['<button><b>Confirm</b></button>', function (instance, toast, button, e, inputs) {
+                gotoWorkspace(inputs[0].options[inputs[0].selectedIndex].value);
+                instance.hide({ transitionOut: 'fadeOut' }, toast, 'button');
+            }, false], // true to focus
+            [
+                "<button>Cancel</button>",
+                function (instance, toast, button, e) {
+                    instance.hide({ transitionOut: "fadeOut" }, toast, "button");
+                },
+            ],
+        ]
+    });
 }
 
 async function getKBShortcuts() {
