@@ -9,6 +9,7 @@ let observer = undefined;
 var checkInterval = 0;
 var checkEveryMinutes, autoLabel, autoMenu;
 var leftSidebarStateCSS;
+let topbarMenuLayout;
 
 export default {
     onload: ({ extensionAPI }) => {
@@ -35,6 +36,15 @@ export default {
                     name: "Autosave interval",
                     description: "Frequency in minutes to save your workspace",
                     action: { type: "input", placeholder: "5" },
+                },
+                {
+                    id: "ws-layout",
+                    name: "Topbar Menu Layout",
+                    description: "Turn on to keep topbar dropdown, off to use modal",
+                    action: {
+                        type: "switch",
+                        onChange: (evt) => { setLayout(evt); }
+                    },
                 },/*
                 {
                     id: "ws-auto-include",
@@ -121,6 +131,21 @@ export default {
             } else {
                 auto = false;
                 if (checkInterval > 0) clearInterval(checkInterval);
+            }
+        }
+
+        if (extensionAPI.settings.get("ws-layout") == true) { //onload
+            topbarMenuLayout = "dropdown";
+        } else {
+            topbarMenuLayout = "modal";
+        }
+        async function setLayout(evt) { // onchange
+            if (evt.target.checked) {
+                topbarMenuLayout = "dropdown";
+                checkWorkspaces();
+            } else {
+                topbarMenuLayout = "modal";
+                checkWorkspaces();
             }
         }
 
@@ -303,20 +328,24 @@ async function checkWorkspaces(before, after) {
                 div.id = "workspacesSelect";
                 var span = document.createElement('span');
                 span.classList.add('bp3-button', 'bp3-minimal', 'bp3-small', 'bp3-icon-folder-shared-open');
-                /*
-                var selectString = "<select name=\"workspacesSelectMenu\" id=\"workspacesSelectMenu\"><option value=\"null\">Select...</option>";
-                for (var j = 0; j < definitions.children.length; j++) {
-                    selectString += "<option value=\"" + definitions.children[j].string + "\">" + definitions.children[j].string + "</option>";
+                
+                if (topbarMenuLayout == "dropdown") {
+                    var selectString = "<select name=\"workspacesSelectMenu\" id=\"workspacesSelectMenu\"><option value=\"null\">Select...</option>";
+                    for (var j = 0; j < definitions.children.length; j++) {
+                        selectString += "<option value=\"" + definitions.children[j].string + "\">" + definitions.children[j].string + "</option>";
+                    }
+                    selectString += "<option value=\"clearWorkspacesCSS\">Clear CSS</option></select>";
+                    span.innerHTML = selectString;
                 }
-                selectString += "<option value=\"clearWorkspacesCSS\">Clear CSS</option></select>";
-                span.innerHTML = selectString;
-                */
+
                 div.append(span);
                 divParent.append(div);
 
-                div.addEventListener('click', function () {
-                    workspaceSelect();
-                });
+                if (topbarMenuLayout == "modal") {
+                    div.addEventListener('click', function () {
+                        workspaceSelect();
+                    });
+                }
 
                 if (document.querySelector(".rm-open-left-sidebar-btn")) { // the sidebar is closed
                     await sleep(20);
@@ -344,13 +373,14 @@ async function checkWorkspaces(before, after) {
                         topBarRow.parentNode.insertBefore(divParent, topBarRow);
                     }
                 }
-                /*
-                document.getElementById("workspacesSelectMenu").addEventListener("change", () => {
-                    if (document.getElementById("workspacesSelectMenu").value != "null") {
-                        gotoWorkspace(document.getElementById("workspacesSelectMenu").value);
-                    }
-                });
-                */
+
+                if (topbarMenuLayout == "dropdown") {
+                    document.getElementById("workspacesSelectMenu").addEventListener("change", () => {
+                        if (document.getElementById("workspacesSelectMenu").value != "null") {
+                            gotoWorkspace(document.getElementById("workspacesSelectMenu").value);
+                        }
+                    });
+                }
             }
             /* // experimenting only at the minute
             var wsName = definitions.children[i].string;
@@ -428,12 +458,11 @@ async function workspaceSelect() {
         }
     }
     definitions.children = await sortObjectsByOrder(definitions.children); // sort by order
-    console.info(definitions.children);
     var selectString = "<select><option value=\"\">Select</option>";
     for (var j = 0; j < definitions.children.length; j++) {
         selectString += "<option value=\"" + definitions.children[j].string + "\">" + definitions.children[j].string + "</option>";
     }
-    selectString += "</select>";
+    selectString += "<option value=\"clearWorkspacesCSS\">Clear CSS</option></select>";
     iziToast.question({
         theme: 'light',
         color: 'black',
