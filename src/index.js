@@ -10,6 +10,7 @@ var checkInterval = 0;
 var checkEveryMinutes, autoLabel, autoMenu;
 var leftSidebarStateCSS;
 let topbarMenuLayout;
+var cpOnly = false;
 
 export default {
     onload: ({ extensionAPI }) => {
@@ -45,7 +46,17 @@ export default {
                         type: "switch",
                         onChange: (evt) => { setLayout(evt); }
                     },
-                },/*
+                },
+                {
+                    id: "ws-cpOnly",
+                    name: "Command Palette only",
+                    description: "Turn on to remove icon from topbar and trigger only via Command Palette",
+                    action: {
+                        type: "switch",
+                        onChange: (evt) => { setCpOnly(evt); }
+                    },
+                },
+                /*
                 {
                     id: "ws-auto-include",
                     name: "Autosave in Topbar Menu",
@@ -94,6 +105,10 @@ export default {
             label: "Update Workspace from current state",
             callback: () => createWorkspace(false, false, true)
         });
+        window.roamAlphaAPI.ui.commandPalette.addCommand({
+            label: "Open Workspace",
+            callback: () => workspaceSelect()
+        });
 
         async function initiateObserver() {
             const targetNode1 = document.getElementsByClassName("rm-topbar")[0];
@@ -124,6 +139,21 @@ export default {
         checkWorkspaces();
         getKBShortcuts();
 
+        if (extensionAPI.settings.get("ws-layout") == true) { // onload
+            topbarMenuLayout = "dropdown";
+        } else {
+            topbarMenuLayout = "modal";
+        }
+        if (extensionAPI.settings.get("ws-cpOnly") == true) { // onload
+            cpOnly = true;
+        } else {
+            cpOnly = false;
+        }
+        if (extensionAPI.settings.get("ws-auto") == true) { // onload
+            auto = true;
+            autoSave();
+        }
+
         async function setAuto(evt) { // onchange
             if (evt.target.checked) {
                 auto = true;
@@ -133,13 +163,7 @@ export default {
                 if (checkInterval > 0) clearInterval(checkInterval);
             }
         }
-
-        if (extensionAPI.settings.get("ws-layout") == true) { //onload
-            topbarMenuLayout = "dropdown";
-        } else {
-            topbarMenuLayout = "modal";
-        }
-        async function setLayout(evt) { // onchange
+        async function setLayout(evt) { // onChange
             if (evt.target.checked) {
                 topbarMenuLayout = "dropdown";
                 checkWorkspaces();
@@ -148,10 +172,14 @@ export default {
                 checkWorkspaces();
             }
         }
-
-        if (extensionAPI.settings.get("ws-auto") == true) { // onload
-            auto = true;
-            autoSave();
+        async function setCpOnly(evt) { // onChange
+            if (evt.target.checked) {
+                cpOnly = true;
+                checkWorkspaces();
+            } else {
+                cpOnly = false;
+                checkWorkspaces();
+            }
         }
 
         async function autoSave() {
@@ -200,6 +228,9 @@ export default {
             });
             window.roamAlphaAPI.ui.commandPalette.removeCommand({
                 label: 'Update Workspace from current state'
+            });
+            window.roamAlphaAPI.ui.commandPalette.removeCommand({
+                label: 'Open Workspace'
             });
             if (document.getElementById("workspaces")) {
                 document.getElementById("workspaces").remove();
@@ -316,7 +347,7 @@ async function checkWorkspaces(before, after) {
     // create the rm.topbar div
     if (definitions?.children.length > 1) {
         for (var i = 0; i < definitions.children.length; i++) {
-            if (!document.getElementById('workspaces')) {
+            if (!document.getElementById('workspaces') && !cpOnly) {
                 var divParent = document.createElement('div');
                 divParent.classList.add('.flex-container');
                 divParent.innerHTML = "";
@@ -328,7 +359,7 @@ async function checkWorkspaces(before, after) {
                 div.id = "workspacesSelect";
                 var span = document.createElement('span');
                 span.classList.add('bp3-button', 'bp3-minimal', 'bp3-small', 'bp3-icon-folder-shared-open');
-                
+
                 if (topbarMenuLayout == "dropdown") {
                     var selectString = "<select name=\"workspacesSelectMenu\" id=\"workspacesSelectMenu\"><option value=\"null\">Select...</option>";
                     for (var j = 0; j < definitions.children.length; j++) {
@@ -391,7 +422,7 @@ async function checkWorkspaces(before, after) {
             }); */
         }
     } else {
-        if (!document.getElementById('workspaces')) {
+        if (!document.getElementById('workspaces') && !cpOnly) {
             var divParent = document.createElement('div');
             divParent.classList.add('.flex-container');
             divParent.innerHTML = "";
