@@ -932,7 +932,7 @@ async function gotoWorkspace(workspace) {
                     if (thisDefinition.children[i].hasOwnProperty('children')) {
                         mainString = thisDefinition.children[i]?.children[0]?.string;
                         if (thisDefinition.children[i].children.length > 1) {
-                            for (j=0; j< thisDefinition.children[i].children.length; j++) {
+                            for (j=1; j< thisDefinition.children[i].children.length; j++) {
                                 if (thisDefinition.children[i]?.children[j]?.string.startsWith("Ref filters:")) {
                                     mainRefFilters = thisDefinition.children[i]?.children[j]?.string.replace("Ref filters: ", "");
                                 } else {
