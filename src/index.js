@@ -585,12 +585,17 @@ async function createWorkspace(autosaved, autoLabel, update) {
     }
     var pageName = undefined;
     var pageFilters = undefined;
+    var pageRefFilters = undefined;
     if (thisPage != "DNP") {
         pageName = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${thisPage}"] [?b :node/title ?title]]`);
         var pageFiltersTemp = await window.roamAlphaAPI.ui.filters.getPageFilters({ "page": { "uid": thisPage } });
         if (pageFiltersTemp.includes.length > 0 || pageFiltersTemp.removes.length > 0) {
             pageFilters = pageFiltersTemp;
         }
+    }
+    var pageRefFiltersTemp = await window.roamAlphaAPI.ui.filters.getPageLinkedRefsFilters({ "page": { "uid": thisPage } });
+    if (pageRefFiltersTemp.includes.length > 0 || pageRefFiltersTemp.removes.length > 0) {
+        pageRefFilters = pageRefFiltersTemp;
     }
 
     var RSwindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
@@ -732,6 +737,9 @@ async function createWorkspace(autosaved, autoLabel, update) {
             if (pageFilters != undefined) {
                 await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
             }
+            if (pageRefFilters != undefined) {
+                await createBlock("Ref filters: "+JSON.stringify(pageRefFilters), ws_5v, 3);
+            }
         } else {
             await createBlock(thisPage, ws_5v, 1);
         }
@@ -789,6 +797,9 @@ async function createWorkspace(autosaved, autoLabel, update) {
             await createBlock("[[" + pageName + "]]", ws_5v, 1);
             if (pageFilters != undefined) {
                 await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
+            }
+            if (pageRefFilters != undefined) {
+                await createBlock("Ref filters: "+JSON.stringify(pageRefFilters), ws_5v, 3);
             }
         } else {
             await createBlock(thisPage, ws_5v, 1);
@@ -852,6 +863,9 @@ async function createWorkspace(autosaved, autoLabel, update) {
             if (pageFilters != undefined) {
                 await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
             }
+            if (pageRefFilters != undefined) {
+                await createBlock("Ref filters: "+JSON.stringify(pageRefFilters), ws_5v, 3);
+            }
         } else {
             await createBlock(thisPage, ws_5v, 1);
         }
@@ -900,6 +914,7 @@ async function gotoWorkspace(workspace) {
         var rightSidebar = undefined;
         var mainString = undefined;
         var mainFilters = undefined;
+        var mainRefFilters = undefined;
         var rightSidebarContent = undefined;
         var workspaceCSS = undefined;
 
@@ -917,7 +932,13 @@ async function gotoWorkspace(workspace) {
                     if (thisDefinition.children[i].hasOwnProperty('children')) {
                         mainString = thisDefinition.children[i]?.children[0]?.string;
                         if (thisDefinition.children[i].children.length > 1) {
-                            mainFilters = thisDefinition.children[i]?.children[1]?.string;
+                            for (j=0; j< thisDefinition.children[i].children.length; j++) {
+                                if (thisDefinition.children[i]?.children[j]?.string.startsWith("Ref filters:")) {
+                                    mainRefFilters = thisDefinition.children[i]?.children[j]?.string.replace("Ref filters: ", "");
+                                } else {
+                                    mainFilters = thisDefinition.children[i]?.children[j]?.string;
+                                }
+                            }
                         }
                     }
                 } else if (thisDefinition.children[i].string.startsWith("Right Sidebar Content:")) {
@@ -969,12 +990,18 @@ async function gotoWorkspace(workspace) {
                 if (mainFilters != undefined) {
                     await window.roamAlphaAPI.ui.filters.setPageFilters({ "page": { "uid": dateUID }, "filters": JSON.parse(mainFilters) })
                 }
+                if (mainRefFilters != undefined) {
+                    await window.roamAlphaAPI.ui.filters.setPageLinkedRefsFilters({ "page": { "uid": dateUID }, "filters": JSON.parse(mainRefFilters) })
+                }
             } else if (mainString.startsWith("((")) {
                 mainString = mainString.slice(2, mainString.length);
                 mainString = mainString.slice(0, -2);
                 await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: mainString } });
                 if (mainFilters != undefined) {
                     await window.roamAlphaAPI.ui.filters.setPageFilters({ "page": { "uid": mainString }, "filters": JSON.parse(mainFilters) })
+                }
+                if (mainRefFilters != undefined) {
+                    await window.roamAlphaAPI.ui.filters.setPageLinkedRefsFilters({ "page": { "uid": mainString }, "filters": JSON.parse(mainRefFilters) })
                 }
             } else if (mainString.startsWith("[[")) { // this is a page name not a uid
                 mainString = mainString.slice(2, mainString.length);
@@ -984,10 +1011,16 @@ async function gotoWorkspace(workspace) {
                 if (mainFilters != undefined) {
                     await window.roamAlphaAPI.ui.filters.setPageFilters({ "page": { "title": mainString }, "filters": JSON.parse(mainFilters) })
                 }
+                if (mainRefFilters != undefined) {
+                    await window.roamAlphaAPI.ui.filters.setPageLinkedRefsFilters({ "page": { "title": mainString }, "filters": JSON.parse(mainRefFilters) })
+                }
             } else {
                 await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: mainString } });
                 if (mainFilters != undefined) {
                     await window.roamAlphaAPI.ui.filters.setPageFilters({ "page": { "uid": mainString }, "filters": JSON.parse(mainFilters) })
+                }
+                if (mainRefFilters != undefined) {
+                    await window.roamAlphaAPI.ui.filters.setPageLinkedRefsFilters({ "page": { "uid": mainString }, "filters": JSON.parse(mainRefFilters) })
                 }
             }
         }
