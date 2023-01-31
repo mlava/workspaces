@@ -128,6 +128,7 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
           const isCloseIconPresent = !!document.querySelector(
             ".rm-topbar .bp3-icon-menu-closed"
           );
+
           if (isOpen && isCloseIconPresent) {
             localStorage.removeItem("roamjs:sidebar:open");
           } else if (!isOpen && !isCloseIconPresent) {
@@ -155,7 +156,7 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
       sidebarStyleObserver.observe(rightSidebar, { attributes: true });
       unloads.add(() => sidebarStyleObserver.disconnect());
 
-      if (!!localStorage.getItem("roamjs:sidebar:open")) {
+      if (!!localStorage.getItem("roamjs:sidebar:open") && extensionAPI.settings.get("ws-save-sidebar")) {
         window.roamAlphaAPI.ui.rightSidebar.open();
       }
     }

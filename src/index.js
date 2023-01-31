@@ -8,7 +8,6 @@ var auto = false;
 let observer = undefined;
 var checkInterval = 0;
 var checkEveryMinutes, autoLabel, autoMenu;
-var leftSidebarStateCSS;
 let topbarMenuLayout;
 var cpOnly = false;
 
@@ -56,13 +55,12 @@ export default {
                         onChange: (evt) => { setCpOnly(evt); }
                     },
                 },
-                /*
                 {
-                    id: "ws-auto-include",
-                    name: "Autosave in Topbar Menu",
-                    description: "Include autosave workspace in Workspaces dropdown",
+                    id: "ws-save-sidebar",
+                    name: "Save Right Sidebar state",
+                    description: "Turn on to save and restore right sidebar open/close state on load",
                     action: { type: "switch" },
-                },*/
+                },
                 {
                     id: "ws-auto-focus",
                     name: "Autofocus Sidebar",
@@ -184,7 +182,7 @@ export default {
 
         async function autoSave() {
             if (extensionAPI.settings.get("ws-auto-time")) {
-                checkEveryMinutes = extensionAPI.settings.get("ws-auto-time");
+                checkEveryMinutes = parseInt(extensionAPI.settings.get("ws-auto-time"));
             } else {
                 checkEveryMinutes = 5;
             }
@@ -193,13 +191,6 @@ export default {
             } else {
                 autoLabel = "Autosave";
             }
-            /*         
-            if (extensionAPI.settings.get("ws-auto-include") == true) {
-                autoMenu = true;
-            } else {
-                autoMenu = false;
-            }
-            */
 
             setTimeout(async () => {
                 await createWorkspace(auto, autoLabel, autoMenu);
@@ -248,6 +239,7 @@ export default {
     }
 }
 
+// Workspaces functions
 async function checkFirstRun() {
     var page = await window.roamAlphaAPI.q(`[:find (pull ?page [:block/string :block/uid {:block/children ...}]) :where [?page :node/title "Workspaces configuration"]  ]`);
     if (page.length > 0) { // the page already exists
