@@ -1,6 +1,7 @@
 Create workspaces that you can automatically open with the click of a button.
 
 **New:**
+- Settings option to turn on or off the Right Sidebar state save function of the Sidebar extension. Keep switched off if you don't want sidebar to open on pageload.
 - Option to hide icon/menu from the Roam topbar altogether. You will need to trigger the Workspace selection modal via a new Command Palette 'Open Workspace' command.
 
 **Recent:**
