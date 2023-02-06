@@ -730,7 +730,7 @@ async function createWorkspace(autosaved, autoLabel, update) {
                 await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
             }
             if (pageRefFilters != undefined) {
-                await createBlock("Ref filters: "+JSON.stringify(pageRefFilters), ws_5v, 3);
+                await createBlock("Ref filters: " + JSON.stringify(pageRefFilters), ws_5v, 3);
             }
         } else {
             await createBlock(thisPage, ws_5v, 1);
@@ -791,7 +791,7 @@ async function createWorkspace(autosaved, autoLabel, update) {
                 await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
             }
             if (pageRefFilters != undefined) {
-                await createBlock("Ref filters: "+JSON.stringify(pageRefFilters), ws_5v, 3);
+                await createBlock("Ref filters: " + JSON.stringify(pageRefFilters), ws_5v, 3);
             }
         } else {
             await createBlock(thisPage, ws_5v, 1);
@@ -856,7 +856,7 @@ async function createWorkspace(autosaved, autoLabel, update) {
                 await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
             }
             if (pageRefFilters != undefined) {
-                await createBlock("Ref filters: "+JSON.stringify(pageRefFilters), ws_5v, 3);
+                await createBlock("Ref filters: " + JSON.stringify(pageRefFilters), ws_5v, 3);
             }
         } else {
             await createBlock(thisPage, ws_5v, 1);
@@ -924,7 +924,7 @@ async function gotoWorkspace(workspace) {
                     if (thisDefinition.children[i].hasOwnProperty('children')) {
                         mainString = thisDefinition.children[i]?.children[0]?.string;
                         if (thisDefinition.children[i].children.length > 1) {
-                            for (j=1; j< thisDefinition.children[i].children.length; j++) {
+                            for (j = 1; j < thisDefinition.children[i].children.length; j++) {
                                 if (thisDefinition.children[i]?.children[j]?.string.startsWith("Ref filters:")) {
                                     mainRefFilters = thisDefinition.children[i]?.children[j]?.string.replace("Ref filters: ", "");
                                 } else {
@@ -1017,17 +1017,17 @@ async function gotoWorkspace(workspace) {
             }
         }
 
-        // remove any pre-existing right sidebar content
-        let rightSidebarWindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
-        if (rightSidebarWindows.length > 0) {
-            for (var i = 0; i < rightSidebarWindows.length; i++) {
-                window.roamAlphaAPI.ui.rightSidebar.removeWindow({ "window": { "type": rightSidebarWindows[i]['type'], "block-uid": rightSidebarWindows[i]['block-uid'] || rightSidebarWindows[i]['page-uid'] || rightSidebarWindows[i]['mentions-uid'] } }) // thanks to Matt Vogel and his Clear Right Sidebar extension as I couldn't quite get this to work as intended until looking at his code - used with permission
-            }
-        }
-
-        // get and create new right sidebar content
-        var descriptors = [];
         if (rightSidebarContent != undefined) {
+            // remove any pre-existing right sidebar content
+            let rightSidebarWindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
+            if (rightSidebarWindows.length > 0) {
+                for (var i = 0; i < rightSidebarWindows.length; i++) {
+                    window.roamAlphaAPI.ui.rightSidebar.removeWindow({ "window": { "type": rightSidebarWindows[i]['type'], "block-uid": rightSidebarWindows[i]['block-uid'] || rightSidebarWindows[i]['page-uid'] || rightSidebarWindows[i]['mentions-uid'] } }) // thanks to Matt Vogel and his Clear Right Sidebar extension as I couldn't quite get this to work as intended until looking at his code - used with permission
+                }
+            }
+
+            // get and create new right sidebar content
+            var descriptors = [];
             rightSidebarContent = await sortObjectsByOrder(rightSidebarContent);
             for (var j = 0; j < rightSidebarContent.length; j++) {
                 if (rightSidebarContent[j]?.string.length > 0) {
