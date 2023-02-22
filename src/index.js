@@ -329,7 +329,9 @@ async function checkWorkspaces(before, after) {
             }
         }
     }
-    definitions.children = await sortObjectsByOrder(definitions.children); // sort by order
+    if (definitions.hasOwnProperty("children") && definitions.children.length > 1) {
+        definitions.children = await sortObjectsByOrder(definitions.children); // sort by order
+    }
 
     // destroy the rm.topbar div
     if (document.getElementById("workspaces")) {
@@ -337,7 +339,7 @@ async function checkWorkspaces(before, after) {
     }
 
     // create the rm.topbar div
-    if (definitions?.children.length > 1) {
+    if (definitions.hasOwnProperty("children") && definitions?.children.length > 1) {
         for (var i = 0; i < definitions.children.length; i++) {
             if (!document.getElementById('workspaces') && !cpOnly) {
                 var divParent = document.createElement('div');
@@ -528,7 +530,7 @@ async function getKBShortcuts() {
             if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
                 for (var j = 0; j < results[0][0].children[i]?.children.length; j++) {
                     for (var k = 0; k < results[0][0].children[i].children[j].children.length; k++) {
-                        if (results[0][0]?.children[i].children[j].children[k].string == "Keyboard Shortcut:") {
+                        if (results[0][0]?.children[i].children[j].children[k].string == "Keyboard Shortcut:" && results[0][0]?.children[i].children[j].children[k].hasOwnProperty("children")) {
                             kbDefinitions.push({ "name": results[0][0].children[i].children[j].string, "kbshortcut": results[0][0].children[i].children[j].children[k].children[0].string });
                         }
                     }
@@ -584,10 +586,10 @@ async function createWorkspace(autosaved, autoLabel, update) {
         if (pageFiltersTemp.includes.length > 0 || pageFiltersTemp.removes.length > 0) {
             pageFilters = pageFiltersTemp;
         }
-    }
-    var pageRefFiltersTemp = await window.roamAlphaAPI.ui.filters.getPageLinkedRefsFilters({ "page": { "uid": thisPage } });
-    if (pageRefFiltersTemp.includes.length > 0 || pageRefFiltersTemp.removes.length > 0) {
-        pageRefFilters = pageRefFiltersTemp;
+        var pageRefFiltersTemp = await window.roamAlphaAPI.ui.filters.getPageLinkedRefsFilters({ "page": { "uid": thisPage } });
+        if (pageRefFiltersTemp.includes.length > 0 || pageRefFiltersTemp.removes.length > 0) {
+            pageRefFilters = pageRefFiltersTemp;
+        }
     }
 
     var RSwindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
@@ -895,7 +897,7 @@ async function gotoWorkspace(workspace) {
                 }
             }
         }
-        if (definitions?.children.length > 0) {
+        if (definitions.hasOwnProperty("children") && definitions?.children.length > 0) {
             for (var i = 0; i < definitions?.children.length; i++) {
                 if (definitions?.children[i]?.string == workspace)
                     var thisDefinition = definitions?.children[i];
