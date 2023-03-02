@@ -95,15 +95,15 @@ export default {
         };
         extensionAPI.settings.panel.create(config);
 
-        window.roamAlphaAPI.ui.commandPalette.addCommand({
+        extensionAPI.ui.commandPalette.addCommand({
             label: "Create Workspace from current state",
             callback: () => createWorkspace(false, false, false)
         });
-        window.roamAlphaAPI.ui.commandPalette.addCommand({
+        extensionAPI.ui.commandPalette.addCommand({
             label: "Update Workspace from current state",
             callback: () => createWorkspace(false, false, true)
         });
-        window.roamAlphaAPI.ui.commandPalette.addCommand({
+        extensionAPI.ui.commandPalette.addCommand({
             label: "Open Workspace",
             callback: () => workspaceSelect()
         });
@@ -214,15 +214,6 @@ export default {
         const unloadRoamJSSidebarFeatures = initializeRoamJSSidebarFeatures(extensionAPI);
         return () => {
             unloadRoamJSSidebarFeatures();
-            window.roamAlphaAPI.ui.commandPalette.removeCommand({
-                label: 'Create Workspace from current state'
-            });
-            window.roamAlphaAPI.ui.commandPalette.removeCommand({
-                label: 'Update Workspace from current state'
-            });
-            window.roamAlphaAPI.ui.commandPalette.removeCommand({
-                label: 'Open Workspace'
-            });
             if (document.getElementById("workspaces")) {
                 document.getElementById("workspaces").remove();
             }
@@ -410,7 +401,7 @@ async function checkWorkspaces(before, after) {
             /* // experimenting only at the minute
             var wsName = definitions.children[i].string;
             console.info(wsName);
-            await window.roamAlphaAPI.ui.commandPalette.addCommand({
+            await extensionAPI.ui.commandPalette.addCommand({
                 label: "Open Workspace: "+wsName+"",
                 callback: () => gotoWorkspace(wsName)
             }); */
@@ -570,13 +561,14 @@ async function createWorkspace(autosaved, autoLabel, update) {
     }
 
     var thisPage = await window.roamAlphaAPI.ui.mainWindow.getOpenPageOrBlockUid();
-    if (!thisPage) {
-        var uri = window.location.href;
-        const regex = /^https:\/\/roamresearch.com\/#\/(app|offline)\/\w+$/; //today's DNP
+    if (thisPage == undefined || thisPage == null) {
+        var uri = window.location.href;        
+        const regex = /^https:\/\/roamresearch\.com\/.+#\/(app|offline)\/\w+$/; //today's DNP
         if (uri.match(regex)) { // this is Daily Notes for today
             thisPage = "DNP";
         }
     }
+    
     var pageName = undefined;
     var pageFilters = undefined;
     var pageRefFilters = undefined;
