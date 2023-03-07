@@ -1,8 +1,5 @@
 import iziToast from "izitoast";
 import initializeRoamJSSidebarFeatures from "./sidebar";
-let keyEventHandler = undefined;
-var boundKEH = undefined;
-var kbDefinitions = [];
 var pullBlock = undefined;
 var auto = false;
 let observer = undefined;
@@ -10,6 +7,8 @@ var checkInterval = 0;
 var checkEveryMinutes, autoLabel, autoMenu;
 let topbarMenuLayout;
 var cpOnly = false;
+var checkWSbefore = false;
+var wsName = [];
 
 export default {
     onload: ({ extensionAPI }) => {
@@ -104,7 +103,7 @@ export default {
             callback: () => createWorkspace(false, false, true)
         });
         extensionAPI.ui.commandPalette.addCommand({
-            label: "Open Workspace",
+            label: "Open Workspace select modal",
             callback: () => workspaceSelect()
         });
 
@@ -135,7 +134,6 @@ export default {
 
         checkFirstRun();
         checkWorkspaces();
-        getKBShortcuts();
 
         if (extensionAPI.settings.get("ws-layout") == true) { // onload
             topbarMenuLayout = "dropdown";
@@ -192,13 +190,274 @@ export default {
                 autoLabel = "Autosave";
             }
 
-            setTimeout(async () => {
-                await createWorkspace(auto, autoLabel, autoMenu);
-                try { if (checkInterval > 0) clearInterval(checkInterval) } catch (e) { }
-                checkInterval = setInterval(async () => {
-                    await createWorkspace(auto, autoLabel/*, autoMenu*/)
-                }, checkEveryMinutes * 60000);
-            }, 10000)
+            await createWorkspace(auto, autoLabel, autoMenu);
+            try { if (checkInterval > 0) clearInterval(checkInterval) } catch (e) { }
+            checkInterval = setInterval(async () => {
+                await createWorkspace(auto, autoLabel/*, autoMenu*/)
+            }, checkEveryMinutes * 60000);
+        }
+
+        async function checkFirstRun() {
+            var page = await window.roamAlphaAPI.q(`[:find (pull ?page [:block/string :block/uid {:block/children ...}]) :where [?page :node/title "Workspaces configuration"]  ]`);
+            if (page.length > 0) { // the page already exists
+                if (page[0][0].hasOwnProperty("children")) {
+                    for (var i = 0; i < page[0][0].children.length; i++) {
+                        if (page[0][0].children[i].string == "Workspace Definitions:") {
+                            var pullBlock = page[0][0].children[i].uid;
+                        }
+                    }
+                }
+                var pageUID = page[0][0].uid;
+            } else { // no workspaces page created, so create one
+                let newUid = roamAlphaAPI.util.generateUID();
+                await window.roamAlphaAPI.createPage({ page: { title: "Workspaces configuration", uid: newUid } });
+                let string1 = "Thank you for installing the Workspaces extension for Roam Research. This page has been automatically generated to allow configuration of your workspaces.";
+                await createBlock(string1, newUid, 0);
+                let string2 = "Below the horizontal line is where you can define workspaces. You will see a variety of options that are required for each workspace definition. A dummy template is provided for reference.";
+                await createBlock(string2, newUid, 1);
+                let string3 = "This short video will walk you through configuration of your first workspace. You could do this manually, but it is easier to just set up your workspace as you like it and then use the Command Palette 'Create Workspace from current state' command.";
+                await createBlock(string3, newUid, 2);
+                let string3a = "{{video:https://www.loom.com/share/4ca0dd72a0fa4c46b012a59717e503d7}}";
+                await createBlock(string3a, newUid, 3);
+                let string4 = "The first two options take either open or closed. The third (Main Content) requires the page uid (9 alphanumeric digit string at end of the url) or a Roam link to the [[page]]. You could also simply put DNP if you want the Workspace to open to whichever daily note page is appropriate for that day. The fourth option takes a list of page or block uids, each on their own row, or a list of [[page]] references on their own row. These will each be opened in the right sidebar.";
+                await createBlock(string4, newUid, 4);
+                let string5 = "A special use case would be to have multiple daily note pages as part of a workspace: you could have the DNP for today in the main content area and both yesterday and tomorrow's DNP in the right sidebar. For today use the code DNP, yesterday use DNP-1 and tomorrow use DNP+1. The dates will be calculated upon loading the workspace, meaning that they will always be right for the day you're using the workspace.";
+                await createBlock(string5, newUid, 5);
+                let string6 = "The final option allows you to define custom css to use for your workspace. Simply place custom css in the code block below the Custom CSS heading.";
+                await createBlock(string6, newUid, 6);
+                await createBlock("---", newUid, 7);
+                let ws_1 = "Workspace Definitions:";
+                let headerUID = await createBlock(ws_1, newUid, 8);
+                let ws_2 = "Dummy";
+                let secHeaderUID = await createBlock(ws_2, headerUID, 0);
+                let ws_3 = "Left Sidebar:";
+                let ws_3v = await createBlock(ws_3, secHeaderUID, 0);
+                await createBlock("__open or closed__", ws_3v, 1);
+                let ws_4 = "Right Sidebar:";
+                let ws_4v = await createBlock(ws_4, secHeaderUID, 1);
+                await createBlock("__open or closed__", ws_4v, 1);
+                let ws_5 = "Main Content:";
+                let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
+                await createBlock("__add a [[ page link here, or DNP to open that day's daily note page__", ws_5v, 1);
+                let ws_6 = "Right Sidebar Content:";
+                let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
+                await createBlock("__add a [[ page link here__", ws_6v, 1);
+                await createBlock("__or a (( blockref here__", ws_6v, 2);
+                await createBlock("__or maybe DNP-1 for yesterday or DNP+1 for tomorrow__", ws_6v, 3);
+                await createBlock("__or go crazy and use DNP-365 to see what you were doing last year!__", ws_6v, 4);
+                let ws_8 = "Custom CSS:";
+                let ws_8v = await createBlock(ws_8, secHeaderUID, 4);
+                await createBlock("```css\nplace any custom css in this code block```", ws_8v, 1);
+                await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: newUid } });
+
+                pullBlock = headerUID;
+            }
+            await window.roamAlphaAPI.data.removePullWatch(
+                "[:block/children :block/uid :block/string {:block/children ...}]",
+                `[:block/uid "${pullBlock}"]`,
+                pullFunction);
+            await window.roamAlphaAPI.data.addPullWatch(
+                "[:block/children :block/uid :block/string {:block/children ...}]",
+                `[:block/uid "${pullBlock}"]`,
+                pullFunction);
+        }
+
+        async function checkWorkspaces(before, after) {
+            if (before != undefined && before != null) {
+                if (before[":block/children"].length > 0) {
+                    if (before[":block/children"].length > after[":block/children"].length) { // a workspace has been removed
+                        for (var i = 0; i < before[":block/children"].length; i++) {
+                            var matched = false;
+                            for (var j = 0; j < after[":block/children"].length; j++) {
+                                if (before[":block/children"][i][":block/string"] == after[":block/children"][j][":block/string"]) {
+                                    matched = true;
+                                }
+                            }
+                            if (matched == false) {
+                                var wsName1 = before[":block/children"][i][":block/string"];
+                                extensionAPI.ui.commandPalette.removeCommand({
+                                    label: 'Open Workspace: ' + wsName1 + ''
+                                });
+                            }
+                        }
+                    } else if (before[":block/children"].length < after[":block/children"].length) { //  a workspace has been added
+                        for (var i = 0; i < after[":block/children"].length; i++) {
+                            var matched = false;
+                            for (var j = 0; j < before[":block/children"].length; j++) {
+                                if (after[":block/children"][i][":block/string"] == before[":block/children"][j][":block/string"]) {
+                                    matched = true;
+                                }
+                            }
+                            if (matched == false) {
+                                var wsName1 = after[":block/children"][i][":block/string"];
+                                await extensionAPI.ui.commandPalette.addCommand({
+                                    label: "Open Workspace: " + wsName1 + "",
+                                    callback: () => gotoWorkspace(wsName1)
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
+            var results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid :block/order {:block/children ...} ]) :where [?page :block/uid "${pageUID}"] ]`);
+            if (results[0][0].hasOwnProperty("children") && results[0][0]?.children.length > 0) {
+                for (var i = 0; i < results[0][0].children.length; i++) {
+                    if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
+                        var definitions = results[0][0]?.children[i];
+                    }
+                }
+            }
+            if (definitions.hasOwnProperty("children") && definitions.children.length > 1) {
+                definitions.children = await sortObjectsByOrder(definitions.children); // sort by order
+            }
+
+            if (definitions.hasOwnProperty("children") && definitions?.children.length > 1 && checkWSbefore == false) { //onload
+                definitions.children.forEach(child => {
+                    const workspaceName = child.string.toString();
+                    extensionAPI.ui.commandPalette.addCommand({
+                        label: `Open Workspace: ${workspaceName}`,
+                        callback: () => gotoWorkspace(workspaceName)
+                    })
+                });
+            }
+            checkWSbefore = true;
+
+            // destroy the rm.topbar div
+            if (document.getElementById("workspaces")) {
+                document.getElementById("workspaces").remove();
+            }
+
+            // create the rm.topbar div & command palette commands
+            if (definitions.hasOwnProperty("children") && definitions?.children.length > 1) {
+                for (var i = 0; i < definitions.children.length; i++) {
+                    if (!document.getElementById('workspaces') && !cpOnly) {
+                        var divParent = document.createElement('div');
+                        divParent.classList.add('.flex-container');
+                        divParent.innerHTML = "";
+                        divParent.id = 'workspaces';
+
+                        var div = document.createElement('div');
+                        div.classList.add('flex-items');
+                        div.innerHTML = "";
+                        div.id = "workspacesSelect";
+                        var span = document.createElement('span');
+                        span.classList.add('bp3-button', 'bp3-minimal', 'bp3-small', 'bp3-icon-folder-shared-open');
+
+                        if (topbarMenuLayout == "dropdown") {
+                            var selectString = "<select name=\"workspacesSelectMenu\" id=\"workspacesSelectMenu\"><option value=\"null\">Select...</option>";
+                            for (var j = 0; j < definitions.children.length; j++) {
+                                selectString += "<option value=\"" + definitions.children[j].string + "\">" + definitions.children[j].string + "</option>";
+                            }
+                            selectString += "<option value=\"clearWorkspacesCSS\">Clear CSS</option></select>";
+                            span.innerHTML = selectString;
+                        }
+
+                        div.append(span);
+                        divParent.append(div);
+
+                        if (topbarMenuLayout == "modal") {
+                            div.addEventListener('click', function () {
+                                workspaceSelect();
+                            });
+                        }
+
+                        if (document.querySelector(".rm-open-left-sidebar-btn")) { // the sidebar is closed
+                            await sleep(20);
+                            if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
+                                let todayTomorrow = document.querySelector("#todayTomorrow");
+                                todayTomorrow.after(divParent);
+                            } else if (document.querySelector("span.bp3-button.bp3-minimal.bp3-icon-arrow-right.pointer.bp3-small.rm-electron-nav-forward-btn")) { // electron client needs separate css
+                                let electronArrows = document.getElementsByClassName("rm-electron-nav-forward-btn")[0];
+                                electronArrows.after(divParent);
+                            } else {
+                                let sidebarButton = document.querySelector(".rm-open-left-sidebar-btn");
+                                sidebarButton.after(divParent);
+                            }
+                        } else {
+                            await sleep(20);
+                            if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
+                                let todayTomorrow = document.querySelector("#todayTomorrow");
+                                todayTomorrow.after(divParent);
+                            } else if (document.querySelector("span.bp3-button.bp3-minimal.bp3-icon-arrow-right.pointer.bp3-small.rm-electron-nav-forward-btn")) { // electron client needs separate css
+                                let electronArrows = document.getElementsByClassName("rm-electron-nav-forward-btn")[0];
+                                electronArrows.after(divParent);
+                            } else {
+                                var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
+                                var topBarRow = topBarContent.childNodes[1];
+                                topBarRow.parentNode.insertBefore(divParent, topBarRow);
+                            }
+                        }
+
+                        if (topbarMenuLayout == "dropdown") {
+                            document.getElementById("workspacesSelectMenu").addEventListener("change", () => {
+                                if (document.getElementById("workspacesSelectMenu").value != "null") {
+                                    gotoWorkspace(document.getElementById("workspacesSelectMenu").value);
+                                }
+                            });
+                        }
+                    }
+                }
+            } else if (definitions.hasOwnProperty("children") && definitions?.children.length == 1) {
+                if (!document.getElementById('workspaces') && !cpOnly) {
+                    var divParent = document.createElement('div');
+                    divParent.classList.add('.flex-container');
+                    divParent.innerHTML = "";
+                    divParent.id = 'workspaces';
+
+                    var div = document.createElement('div');
+                    div.classList.add('flex-items');
+                    div.innerHTML = "";
+                    div.id = definitions?.children[0].string;
+                    var span = document.createElement('span');
+                    span.classList.add('bp3-button', 'bp3-minimal', 'bp3-small', 'bp3-icon-folder-shared-open');
+                    //span.innerHTML = definitions.children[0].string;
+                    div.append(span);
+                    divParent.append(div);
+
+                    var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
+                    var topBarRow = topBarContent.childNodes[1];
+
+                    if (topBarContent && topBarRow) {
+                        topBarRow.parentNode.insertBefore(divParent, topBarRow);
+                    }
+                    div.addEventListener('click', function () {
+                        gotoWorkspace(definitions.children[0].string);
+                    });
+                    if (document.querySelector(".rm-open-left-sidebar-btn")) { // the sidebar is closed
+                        await sleep(20);
+                        if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
+                            let todayTomorrow = document.querySelector("#todayTomorrow");
+                            todayTomorrow.after(divParent);
+                        } else if (document.querySelector("span.bp3-button.bp3-minimal.bp3-icon-arrow-right.pointer.bp3-small.rm-electron-nav-forward-btn")) { // electron client needs separate css
+                            let electronArrows = document.getElementsByClassName("rm-electron-nav-forward-btn")[0];
+                            electronArrows.after(divParent);
+                        } else {
+                            let sidebarButton = document.querySelector(".rm-open-left-sidebar-btn");
+                            sidebarButton.after(divParent);
+                        }
+                    } else {
+                        await sleep(20);
+                        if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
+                            let todayTomorrow = document.querySelector("#todayTomorrow");
+                            todayTomorrow.after(divParent);
+                        } else if (document.querySelector("span.bp3-button.bp3-minimal.bp3-icon-arrow-right.pointer.bp3-small.rm-electron-nav-forward-btn")) { // electron client needs separate css
+                            let electronArrows = document.getElementsByClassName("rm-electron-nav-forward-btn")[0];
+                            electronArrows.after(divParent);
+                        } else {
+                            var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
+                            var topBarRow = topBarContent.childNodes[1];
+                            topBarRow.parentNode.insertBefore(divParent, topBarRow);
+                        }
+                    }
+                }
+            }
+            console.info("Workspace definitions updated");
+        }
+
+        function pullFunction(before, after) {
+            checkWorkspaces(before, after);
         }
 
         /*
@@ -217,7 +476,6 @@ export default {
             if (document.getElementById("workspaces")) {
                 document.getElementById("workspaces").remove();
             }
-            window.removeEventListener('keydown', boundKEH);
             if (checkInterval > 0) clearInterval(checkInterval);
 
             window.roamAlphaAPI.data.removePullWatch(
@@ -231,238 +489,6 @@ export default {
 }
 
 // Workspaces functions
-async function checkFirstRun() {
-    var page = await window.roamAlphaAPI.q(`[:find (pull ?page [:block/string :block/uid {:block/children ...}]) :where [?page :node/title "Workspaces configuration"]  ]`);
-    if (page.length > 0) { // the page already exists
-        if (page[0][0].hasOwnProperty("children")) {
-            for (var i = 0; i < page[0][0].children.length; i++) {
-                if (page[0][0].children[i].string == "Workspace Definitions:") {
-                    var pullBlock = page[0][0].children[i].uid;
-                }
-            }
-        }
-        var pageUID = page[0][0].uid;
-    } else { // no workspaces page created, so create one
-        let newUid = roamAlphaAPI.util.generateUID();
-        await window.roamAlphaAPI.createPage({ page: { title: "Workspaces configuration", uid: newUid } });
-        let string1 = "Thank you for installing the Workspaces extension for Roam Research. This page has been automatically generated to allow configuration of your workspaces.";
-        await createBlock(string1, newUid, 0);
-        let string2 = "Below the horizontal line is where you can define workspaces. You will see a variety of options that are required for each workspace definition. A dummy template is provided for reference.";
-        await createBlock(string2, newUid, 1);
-        let string3 = "This short video will walk you through configuration of your first workspace. You could do this manually, but it is easier to just set up your workspace as you like it and then use the Command Palette 'Create Workspace from current state' command.";
-        await createBlock(string3, newUid, 2);
-        let string3a = "{{video:https://www.loom.com/share/4ca0dd72a0fa4c46b012a59717e503d7}}";
-        await createBlock(string3a, newUid, 3);
-        let string4 = "The first two options take either open or closed. The third (Main Content) requires the page uid (9 alphanumeric digit string at end of the url) or a Roam link to the [[page]]. You could also simply put DNP if you want the Workspace to open to whichever daily note page is appropriate for that day. The fourth option takes a list of page or block uids, each on their own row, or a list of [[page]] references on their own row. These will each be opened in the right sidebar.";
-        await createBlock(string4, newUid, 4);
-        let string5 = "A special use case would be to have multiple daily note pages as part of a workspace: you could have the DNP for today in the main content area and both yesterday and tomorrow's DNP in the right sidebar. For today use the code DNP, yesterday use DNP-1 and tomorrow use DNP+1. The dates will be calculated upon loading the workspace, meaning that they will always be right for the day you're using the workspace.";
-        await createBlock(string5, newUid, 5);
-        let string6 = "The final option allows you to define a keyboard shortcut to automatically navigate to your workspace. The shortcut will be SHIFT + ALT + a letter of your choice. Type a single lowercase letter in the space provided. Please note that not all letters will work as some are reserved for use by the browser or other functions. It might require some experimentation to find the right key to use! Setting a new keyboard shortcut requires you to either reload the page or the extension.";
-        await createBlock(string6, newUid, 6);
-        await createBlock("---", newUid, 7);
-        let ws_1 = "Workspace Definitions:";
-        let headerUID = await createBlock(ws_1, newUid, 8);
-        let ws_2 = "Dummy";
-        let secHeaderUID = await createBlock(ws_2, headerUID, 0);
-        let ws_3 = "Left Sidebar:";
-        let ws_3v = await createBlock(ws_3, secHeaderUID, 0);
-        await createBlock("__open or closed__", ws_3v, 1);
-        let ws_4 = "Right Sidebar:";
-        let ws_4v = await createBlock(ws_4, secHeaderUID, 1);
-        await createBlock("__open or closed__", ws_4v, 1);
-        let ws_5 = "Main Content:";
-        let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
-        await createBlock("__add a [[ page link here, or DNP to open that day's daily note page__", ws_5v, 1);
-        let ws_6 = "Right Sidebar Content:";
-        let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
-        await createBlock("__add a [[ page link here__", ws_6v, 1);
-        await createBlock("__or a (( blockref here__", ws_6v, 2);
-        await createBlock("__or maybe DNP-1 for yesterday or DNP+1 for tomorrow__", ws_6v, 3);
-        await createBlock("__or go crazy and use DNP-365 to see what you were doing last year!__", ws_6v, 4);
-        let ws_7 = "Keyboard Shortcut:";
-        let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
-        await createBlock("__type one letter here__", ws_7v, 1);
-        let ws_8 = "Custom CSS:";
-        let ws_8v = await createBlock(ws_8, secHeaderUID, 5);
-        await createBlock("```css\nplace any custom css in this code block```", ws_8v, 1);
-        await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: newUid } });
-
-        pullBlock = headerUID;
-    }
-    await window.roamAlphaAPI.data.removePullWatch(
-        "[:block/children :block/uid :block/string {:block/children ...}]",
-        `[:block/uid "${pullBlock}"]`,
-        pullFunction);
-    await window.roamAlphaAPI.data.addPullWatch(
-        "[:block/children :block/uid :block/string {:block/children ...}]",
-        `[:block/uid "${pullBlock}"]`,
-        pullFunction);
-}
-
-async function checkWorkspaces(before, after) {
-    /* // experimenting only at the minute
-    if (before != undefined && before != null) {
-        if (before[":block/children"].length > 0) {
-            for (var i = 0; i < before[":block/children"].length; i++) {
-                var wsName = before[":block/children"][i][":block/string"];
-                window.roamAlphaAPI.ui.commandPalette.removeCommand({
-                    label: 'Open Workspace: '+wsName+''
-                });
-            }
-        }
-    } */
-    let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
-    var results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid :block/order {:block/children ...} ]) :where [?page :block/uid "${pageUID}"] ]`);
-    if (results[0][0].hasOwnProperty("children") && results[0][0]?.children.length > 0) {
-        for (var i = 0; i < results[0][0].children.length; i++) {
-            if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
-                var definitions = results[0][0]?.children[i];
-            }
-        }
-    }
-    if (definitions.hasOwnProperty("children") && definitions.children.length > 1) {
-        definitions.children = await sortObjectsByOrder(definitions.children); // sort by order
-    }
-
-    // destroy the rm.topbar div
-    if (document.getElementById("workspaces")) {
-        document.getElementById("workspaces").remove();
-    }
-
-    // create the rm.topbar div
-    if (definitions.hasOwnProperty("children") && definitions?.children.length > 1) {
-        for (var i = 0; i < definitions.children.length; i++) {
-            if (!document.getElementById('workspaces') && !cpOnly) {
-                var divParent = document.createElement('div');
-                divParent.classList.add('.flex-container');
-                divParent.innerHTML = "";
-                divParent.id = 'workspaces';
-
-                var div = document.createElement('div');
-                div.classList.add('flex-items');
-                div.innerHTML = "";
-                div.id = "workspacesSelect";
-                var span = document.createElement('span');
-                span.classList.add('bp3-button', 'bp3-minimal', 'bp3-small', 'bp3-icon-folder-shared-open');
-
-                if (topbarMenuLayout == "dropdown") {
-                    var selectString = "<select name=\"workspacesSelectMenu\" id=\"workspacesSelectMenu\"><option value=\"null\">Select...</option>";
-                    for (var j = 0; j < definitions.children.length; j++) {
-                        selectString += "<option value=\"" + definitions.children[j].string + "\">" + definitions.children[j].string + "</option>";
-                    }
-                    selectString += "<option value=\"clearWorkspacesCSS\">Clear CSS</option></select>";
-                    span.innerHTML = selectString;
-                }
-
-                div.append(span);
-                divParent.append(div);
-
-                if (topbarMenuLayout == "modal") {
-                    div.addEventListener('click', function () {
-                        workspaceSelect();
-                    });
-                }
-
-                if (document.querySelector(".rm-open-left-sidebar-btn")) { // the sidebar is closed
-                    await sleep(20);
-                    if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
-                        let todayTomorrow = document.querySelector("#todayTomorrow");
-                        todayTomorrow.after(divParent);
-                    } else if (document.querySelector("span.bp3-button.bp3-minimal.bp3-icon-arrow-right.pointer.bp3-small.rm-electron-nav-forward-btn")) { // electron client needs separate css
-                        let electronArrows = document.getElementsByClassName("rm-electron-nav-forward-btn")[0];
-                        electronArrows.after(divParent);
-                    } else {
-                        let sidebarButton = document.querySelector(".rm-open-left-sidebar-btn");
-                        sidebarButton.after(divParent);
-                    }
-                } else {
-                    await sleep(20);
-                    if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
-                        let todayTomorrow = document.querySelector("#todayTomorrow");
-                        todayTomorrow.after(divParent);
-                    } else if (document.querySelector("span.bp3-button.bp3-minimal.bp3-icon-arrow-right.pointer.bp3-small.rm-electron-nav-forward-btn")) { // electron client needs separate css
-                        let electronArrows = document.getElementsByClassName("rm-electron-nav-forward-btn")[0];
-                        electronArrows.after(divParent);
-                    } else {
-                        var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
-                        var topBarRow = topBarContent.childNodes[1];
-                        topBarRow.parentNode.insertBefore(divParent, topBarRow);
-                    }
-                }
-
-                if (topbarMenuLayout == "dropdown") {
-                    document.getElementById("workspacesSelectMenu").addEventListener("change", () => {
-                        if (document.getElementById("workspacesSelectMenu").value != "null") {
-                            gotoWorkspace(document.getElementById("workspacesSelectMenu").value);
-                        }
-                    });
-                }
-            }
-            /* // experimenting only at the minute
-            var wsName = definitions.children[i].string;
-            console.info(wsName);
-            await extensionAPI.ui.commandPalette.addCommand({
-                label: "Open Workspace: "+wsName+"",
-                callback: () => gotoWorkspace(wsName)
-            }); */
-        }
-    } else {
-        if (!document.getElementById('workspaces') && !cpOnly) {
-            var divParent = document.createElement('div');
-            divParent.classList.add('.flex-container');
-            divParent.innerHTML = "";
-            divParent.id = 'workspaces';
-
-            var div = document.createElement('div');
-            div.classList.add('flex-items');
-            div.innerHTML = "";
-            div.id = definitions?.children[0].string;
-            var span = document.createElement('span');
-            span.classList.add('bp3-button', 'bp3-minimal', 'bp3-small', 'bp3-icon-folder-shared-open');
-            //span.innerHTML = definitions.children[0].string;
-            div.append(span);
-            divParent.append(div);
-
-            var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
-            var topBarRow = topBarContent.childNodes[1];
-
-            if (topBarContent && topBarRow) {
-                topBarRow.parentNode.insertBefore(divParent, topBarRow);
-            }
-            div.addEventListener('click', function () {
-                gotoWorkspace(definitions.children[0].string);
-            });
-            if (document.querySelector(".rm-open-left-sidebar-btn")) { // the sidebar is closed
-                await sleep(20);
-                if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
-                    let todayTomorrow = document.querySelector("#todayTomorrow");
-                    todayTomorrow.after(divParent);
-                } else if (document.querySelector("span.bp3-button.bp3-minimal.bp3-icon-arrow-right.pointer.bp3-small.rm-electron-nav-forward-btn")) { // electron client needs separate css
-                    let electronArrows = document.getElementsByClassName("rm-electron-nav-forward-btn")[0];
-                    electronArrows.after(divParent);
-                } else {
-                    let sidebarButton = document.querySelector(".rm-open-left-sidebar-btn");
-                    sidebarButton.after(divParent);
-                }
-            } else {
-                await sleep(20);
-                if (document.querySelector("#todayTomorrow")) { // Yesterday Tomorrow extension also installed, so place this to right
-                    let todayTomorrow = document.querySelector("#todayTomorrow");
-                    todayTomorrow.after(divParent);
-                } else if (document.querySelector("span.bp3-button.bp3-minimal.bp3-icon-arrow-right.pointer.bp3-small.rm-electron-nav-forward-btn")) { // electron client needs separate css
-                    let electronArrows = document.getElementsByClassName("rm-electron-nav-forward-btn")[0];
-                    electronArrows.after(divParent);
-                } else {
-                    var topBarContent = document.querySelector("#app > div > div > div.flex-h-box > div.roam-main > div.rm-files-dropzone > div");
-                    var topBarRow = topBarContent.childNodes[1];
-                    topBarRow.parentNode.insertBefore(divParent, topBarRow);
-                }
-            }
-        }
-    }
-    console.info("Workspace definitions updated");
-}
-
 async function workspaceSelect() {
     let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
     var results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid :block/order {:block/children ...} ]) :where [?page :block/uid "${pageUID}"] ]`);
@@ -508,44 +534,6 @@ async function workspaceSelect() {
     });
 }
 
-async function getKBShortcuts() {
-    window.removeEventListener('keydown', boundKEH);
-    while (kbDefinitions.length) {
-        kbDefinitions.pop();
-    }
-    let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
-    let results = await window.roamAlphaAPI.q(`[:find (pull ?page [:node/title :block/string :block/uid {:block/children ...} ]) :where [?page :block/uid "${pageUID}"]  ]`);
-
-    if (results[0][0]?.children.length > 0) {
-        for (var i = 0; i < results[0][0].children.length; i++) {
-            if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
-                for (var j = 0; j < results[0][0].children[i]?.children.length; j++) {
-                    for (var k = 0; k < results[0][0].children[i].children[j].children.length; k++) {
-                        if (results[0][0]?.children[i].children[j].children[k].string == "Keyboard Shortcut:" && results[0][0]?.children[i].children[j].children[k].hasOwnProperty("children")) {
-                            kbDefinitions.push({ "name": results[0][0].children[i].children[j].string, "kbshortcut": results[0][0].children[i].children[j].children[k].children[0].string });
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    keyEventHandler = function (kbDefinitions, e) {
-        let eventKey = e.code;
-        let eventShift = e.shiftKey;
-        let eventAlt = e.altKey;
-        for (var i = 0; i < kbDefinitions.length; i++) {
-            let kbshortcutKey = "Key" + kbDefinitions[i].kbshortcut.toUpperCase();
-            if (eventKey == kbshortcutKey && eventShift && eventAlt) {
-                gotoWorkspace(kbDefinitions[i].name);
-            }
-        }
-    }
-    boundKEH = keyEventHandler.bind(null, kbDefinitions);
-    window.addEventListener('keydown', boundKEH);
-    console.info("Workspace keyboard Shortcuts updated");
-}
-
 async function createWorkspace(autosaved, autoLabel, update) {
     // get required information to define a workspace
     var leftSidebarState, rightSidebarState;
@@ -562,13 +550,13 @@ async function createWorkspace(autosaved, autoLabel, update) {
 
     var thisPage = await window.roamAlphaAPI.ui.mainWindow.getOpenPageOrBlockUid();
     if (thisPage == undefined || thisPage == null) {
-        var uri = window.location.href;        
-        const regex = /^https:\/\/roamresearch\.com\/.+#\/(app|offline)\/\w+$/; //today's DNP
+        var uri = window.location.href;
+        const regex = /^https:\/\/roamresearch\.com\/.+\/(app|offline)\/\w+$/; //today's DNP
         if (uri.match(regex)) { // this is Daily Notes for today
             thisPage = "DNP";
         }
     }
-    
+
     var pageName = undefined;
     var pageFilters = undefined;
     var pageRefFilters = undefined;
@@ -661,7 +649,7 @@ async function createWorkspace(autosaved, autoLabel, update) {
             displayMode: 2,
             id: "question",
             title: "Workspaces",
-            message: "What do you want to call this Workspace? What key (in addition to ALT-SHIFT) will trigger it?",
+            message: "What do you want to call this Workspace?",
             position: "center",
             inputs: [
                 [
@@ -671,19 +659,12 @@ async function createWorkspace(autosaved, autoLabel, update) {
                     },
                     true,
                 ],
-                [
-                    '<input type="text" placeholder="keyboard shortcut key">',
-                    "keyup",
-                    function (instance, toast, input, e) {
-                    },
-                    false,
-                ],
             ],
             buttons: [
                 [
                     "<button><b>Confirm</b></button>",
                     function (instance, toast, button, e, inputs) {
-                        writeNewWS(inputs[0].value, inputs[1].value);
+                        writeNewWS(inputs[0].value);
                         instance.hide({ transitionOut: "fadeOut" }, toast, "button");
                     },
                     false,
@@ -700,7 +681,7 @@ async function createWorkspace(autosaved, autoLabel, update) {
         });
     }
 
-    async function writeNewWS(val, valKb) {
+    async function writeNewWS(val) {
         // write new workspace definition to Workspaces configuration page
         let parentUID = definitions.uid;
         var order;
@@ -743,9 +724,6 @@ async function createWorkspace(autosaved, autoLabel, update) {
                 }
             }
         }
-        let ws_7 = "Keyboard Shortcut:";
-        let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
-        await createBlock(valKb, ws_7v, 1);
         let ws_8 = "Custom CSS:";
         let ws_8v = await createBlock(ws_8, secHeaderUID, 5);
         await createBlock("```css\nplace any custom css in this code block```", ws_8v, 1);
@@ -804,9 +782,6 @@ async function createWorkspace(autosaved, autoLabel, update) {
                 }
             }
         }
-        let ws_7 = "Keyboard Shortcut:";
-        let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
-        await createBlock("", ws_7v, 1);
     }
 
     async function updateAutoWS(autoLabel) {
@@ -869,9 +844,6 @@ async function createWorkspace(autosaved, autoLabel, update) {
                 }
             }
         }
-        let ws_7 = "Keyboard Shortcut:";
-        let ws_7v = await createBlock(ws_7, secHeaderUID, 4);
-        await createBlock("", ws_7v, 1);
     }
 }
 
@@ -1134,11 +1106,6 @@ async function clearWorkspaceCSS() {
 }
 
 // helper functions
-function pullFunction(before, after) {
-    checkWorkspaces(before, after);
-    getKBShortcuts();
-}
-
 function convertToRoamDate(dateString) {
     var parsedDate = dateString.split('-');
     var year = parsedDate[2];
