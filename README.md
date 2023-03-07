@@ -1,5 +1,9 @@
 Create workspaces that you can automatically open with the click of a button.
 
+**Breaking Change:**
+- Add all workspaces to Command Palette, and by extension, Roam Research hotkeys can now be defined for each workspace.
+  - removed Keyboard shortcut from definitions for new workspaces. They will be ignored if defined on existing workspaces. Please use Roam Research hotkeys via Settings instead.
+  
 **New:**
 - Settings option to turn on or off the Right Sidebar state save function of the Sidebar extension. Keep switched off if you don't want sidebar to open on pageload.
 - Option to hide icon/menu from the Roam topbar altogether. You will need to trigger the Workspace selection modal via a new Command Palette 'Open Workspace' command.
