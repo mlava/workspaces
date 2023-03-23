@@ -88,7 +88,10 @@ export default {
                     id: "ws-exp-col",
                     name: "Expand/Collapse All Button",
                     description: "Whether or not to display the expand/collapse all windows button on the top of the sidebar",
-                    action: { type: "switch" },
+                    action: {
+                        type: "switch",
+                        onChange: (evt) => { enableECACP(evt); }
+                    },
                 },
             ]
         };
@@ -107,18 +110,31 @@ export default {
             callback: () => workspaceSelect()
         });
 
-        // CP option for expand/collapse all from sidebar.js
-        extensionAPI.ui.commandPalette.addCommand({
-            label: "Toggle expand/collapse all right sidebar content",
-            callback: () => {
-                let button = document.getElementsByClassName("bp3-button bp3-minimal");
-                for (var i = 0; i < button.length; i++) {
-                    if (button[i]?.childNodes[0]?.className == "bp3-icon bp3-icon-collapse-all" || button[i]?.childNodes[0]?.className == "bp3-icon bp3-icon-expand-all") {
-                        button[i].click();
+        if (extensionAPI.settings.get("ws-exp-col") == true) { // onload
+            enableECACP(false, true);
+        }
+
+        function enableECACP(evt, state) {
+            console.info(evt, state)
+            if ((evt != undefined && evt?.target?.checked == true) || state == true) {
+                // CP option for expand/collapse all from sidebar.js
+                extensionAPI.ui.commandPalette.addCommand({
+                    label: "Toggle expand/collapse all right sidebar content",
+                    callback: () => {
+                        let button = document.getElementsByClassName("bp3-button bp3-minimal");
+                        for (var i = 0; i < button.length; i++) {
+                            if (button[i]?.childNodes[0]?.className == "bp3-icon bp3-icon-collapse-all" || button[i]?.childNodes[0]?.className == "bp3-icon bp3-icon-expand-all") {
+                                button[i].click();
+                            }
+                        }
                     }
-                }
+                });
+            } else {
+                extensionAPI.ui.commandPalette.removeCommand({
+                    label: "Toggle expand/collapse all right sidebar content",
+                });
             }
-        });
+        }
 
         // fix right sidebar top align with Roam Studio
         if (document.getElementById("roamstudio-css-system")) {
