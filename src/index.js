@@ -107,6 +107,19 @@ export default {
             callback: () => workspaceSelect()
         });
 
+        // CP option for expand/collapse all from sidebar.js
+        extensionAPI.ui.commandPalette.addCommand({
+            label: "Toggle expand/collapse all right sidebar content",
+            callback: () => {
+                let button = document.getElementsByClassName("bp3-button bp3-minimal");
+                for (var i = 0; i < button.length; i++) {
+                    if (button[i]?.childNodes[0]?.className == "bp3-icon bp3-icon-collapse-all" || button[i]?.childNodes[0]?.className == "bp3-icon bp3-icon-expand-all") {
+                        button[i].click();
+                    }
+                }
+            }
+        });
+
         async function initiateObserver() {
             const targetNode1 = document.getElementsByClassName("rm-topbar")[0];
             const config = { attributes: false, childList: true, subtree: true };
