@@ -120,6 +120,23 @@ export default {
             }
         });
 
+        // fix right sidebar top align with Roam Studio
+        if (document.getElementById("roamstudio-css-system")) {
+            if (!document.getElementById("workspaces-css-fix-roam-studio")) {
+                var head = document.getElementsByTagName("head")[0];
+                var style = document.createElement("style");
+                style.id = "workspaces-css-fix-roam-studio";
+                style.textContent = "#right-sidebar > .flex-h-box { padding-top: 7px !important; padding-bottom: 7px !important; }";
+                head.appendChild(style);
+            }
+        } else {
+            if (document.getElementById("workspaces-css-fix-roam-studio")) {
+                var head = document.getElementsByTagName("head")[0];
+                var cssStyles = document.getElementById("workspaces-css-fix-roam-studio");
+                head.removeChild(cssStyles);
+            }
+        }
+
         async function initiateObserver() {
             const targetNode1 = document.getElementsByClassName("rm-topbar")[0];
             const config = { attributes: false, childList: true, subtree: true };
@@ -497,6 +514,11 @@ export default {
                 pullFunction);
             observer.disconnect();
             clearWorkspaceCSS();
+            if (document.getElementById("workspaces-css-fix-roam-studio")) {
+                var head = document.getElementsByTagName("head")[0];
+                var cssStyles = document.getElementById("workspaces-css-fix-roam-studio");
+                head.removeChild(cssStyles);
+            }
         }
     }
 }
