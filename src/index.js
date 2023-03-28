@@ -112,11 +112,30 @@ export default {
 
         if (extensionAPI.settings.get("ws-exp-col") == true) { // onload
             enableECACP(false, true);
+        } else {
+            extensionAPI.ui.commandPalette.addCommand({
+                label: "Toggle expand/collapse all right sidebar content",
+                callback: () => {
+                    let RSContent = document.querySelectorAll(".rm-sidebar-window .window-headers");
+                    if (RSContent[0].innerHTML.includes("rm-caret-open")) { // collapse all windows 
+                        document.querySelectorAll(
+                            ".rm-sidebar-window .window-headers .rm-caret-open"
+                          )
+                          .forEach((e) => e.click());
+                    } else { // expand all windows
+                        document.querySelectorAll(".rm-sidebar-window .window-headers .rm-caret-closed").forEach(
+                            (e) => e.click()
+                          );
+                    }
+                }
+            });
         }
 
         function enableECACP(evt, state) {
-            console.info(evt, state)
             if ((evt != undefined && evt?.target?.checked == true) || state == true) {
+                extensionAPI.ui.commandPalette.removeCommand({
+                    label: "Toggle expand/collapse all right sidebar content",
+                });
                 // CP option for expand/collapse all from sidebar.js
                 extensionAPI.ui.commandPalette.addCommand({
                     label: "Toggle expand/collapse all right sidebar content",
@@ -132,6 +151,22 @@ export default {
             } else {
                 extensionAPI.ui.commandPalette.removeCommand({
                     label: "Toggle expand/collapse all right sidebar content",
+                });
+                extensionAPI.ui.commandPalette.addCommand({
+                    label: "Toggle expand/collapse all right sidebar content",
+                    callback: () => {
+                        let RSContent = document.querySelectorAll(".rm-sidebar-window .window-headers");
+                        if (RSContent[0].innerHTML.includes("rm-caret-open")) { // collapse all windows 
+                            document.querySelectorAll(
+                                ".rm-sidebar-window .window-headers .rm-caret-open"
+                              )
+                              .forEach((e) => e.click());
+                        } else { // expand all windows
+                            document.querySelectorAll(".rm-sidebar-window .window-headers .rm-caret-closed").forEach(
+                                (e) => e.click()
+                              );
+                        }
+                    }
                 });
             }
         }
