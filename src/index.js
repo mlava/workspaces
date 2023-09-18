@@ -2,6 +2,7 @@ import iziToast from "izitoast";
 import initializeRoamJSSidebarFeatures from "./sidebar";
 var pullBlock = undefined;
 var auto = false;
+var key;
 let observer = undefined;
 var checkInterval = 0;
 var checkEveryMinutes, autoLabel, autoMenu;
@@ -33,7 +34,7 @@ export default {
                 {
                     id: "ws-auto-time",
                     name: "Autosave interval",
-                    description: "Frequency in minutes to save your workspace",
+                    description: "Frequency in minutes to save your workspace (1-30)",
                     action: { type: "input", placeholder: "5" },
                 },
                 {
@@ -120,12 +121,12 @@ export default {
                     if (RSContent[0].innerHTML.includes("rm-caret-open")) { // collapse all windows 
                         document.querySelectorAll(
                             ".rm-sidebar-window .window-headers .rm-caret-open"
-                          )
-                          .forEach((e) => e.click());
+                        )
+                            .forEach((e) => e.click());
                     } else { // expand all windows
                         document.querySelectorAll(".rm-sidebar-window .window-headers .rm-caret-closed").forEach(
                             (e) => e.click()
-                          );
+                        );
                     }
                 }
             });
@@ -159,12 +160,12 @@ export default {
                         if (RSContent[0].innerHTML.includes("rm-caret-open")) { // collapse all windows 
                             document.querySelectorAll(
                                 ".rm-sidebar-window .window-headers .rm-caret-open"
-                              )
-                              .forEach((e) => e.click());
+                            )
+                                .forEach((e) => e.click());
                         } else { // expand all windows
                             document.querySelectorAll(".rm-sidebar-window .window-headers .rm-caret-closed").forEach(
                                 (e) => e.click()
-                              );
+                            );
                         }
                     }
                 });
@@ -261,7 +262,20 @@ export default {
 
         async function autoSave() {
             if (extensionAPI.settings.get("ws-auto-time")) {
-                checkEveryMinutes = parseInt(extensionAPI.settings.get("ws-auto-time"));
+                const regex = /^[0-9]{1,2}$/m;
+                if (regex.test(extensionAPI.settings.get("ws-auto-time"))) {
+                    if (extensionAPI.settings.get("ws-auto-time") < 1 || extensionAPI.settings.get("ws-auto-time") > 30) {
+                        key = "num";
+                        sendConfigAlert(key);
+                        checkEveryMinutes = 5;
+                    } else {
+                        checkEveryMinutes = parseInt(extensionAPI.settings.get("ws-auto-time"));
+                    }
+                } else {
+                    key = "num";
+                    sendConfigAlert(key);
+                    checkEveryMinutes = 5;
+                }
             } else {
                 checkEveryMinutes = 5;
             }
@@ -785,7 +799,15 @@ async function createWorkspace(autosaved, autoLabel, update) {
         await createBlock(rightSidebarState, ws_4v, 1);
         let ws_5 = "Main Content:";
         let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
-        if (pageName != undefined && pageName.length > 0) {
+        if (thisPage == "DNP") {
+            await createBlock("DNP", ws_5v, 1);
+            if (pageFilters != undefined) {
+                await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
+            }
+            if (pageRefFilters != undefined) {
+                await createBlock("Ref filters: " + JSON.stringify(pageRefFilters), ws_5v, 3);
+            }
+        } else if (pageName != undefined && pageName.length > 0) {
             await createBlock("[[" + pageName + "]]", ws_5v, 1);
             if (pageFilters != undefined) {
                 await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
@@ -819,6 +841,7 @@ async function createWorkspace(autosaved, autoLabel, update) {
         console.info("Updating workspace");
         // update workspace definition to Workspaces configuration page
         var order;
+        var RSUpdated = false;
 
         if (definitions.hasOwnProperty("children")) {
             order = 1 + (definitions.children.length);
@@ -826,7 +849,31 @@ async function createWorkspace(autosaved, autoLabel, update) {
                 if (definitions.children[i].uid == secHeaderUID) {
                     if (definitions.children[i].hasOwnProperty("children")) {
                         for (var j = 0; j < definitions.children[i].children.length; j++) {
-                            window.roamAlphaAPI.deleteBlock({ "block": { "uid": definitions.children[i].children[j].uid } })
+                            if (definitions.children[i].children[j].string == "Main Content:" && definitions.children[i].children[j].hasOwnProperty("children")) {
+                                for (var k = 0; k < definitions.children[i].children[j].children.length; k++) {
+                                    if (definitions.children[i].children[j].children[k].string.includes("DNP")) {
+                                        thisPage = definitions.children[i].children[j].children[k].string;
+                                    }
+                                }
+                            } else if (definitions.children[i].children[j].string == "Right Sidebar Content:" && definitions.children[i].children[j].hasOwnProperty("children")) {
+                                RSUpdated = true;
+                                // need to iterate through the RSWList and overwrite if not a DNP block, ensuring to add extras even if they didn't exist before
+                                for (var k = 0; k < definitions.children[i].children[j].children.length; k++) {
+                                    if (!definitions.children[i].children[j].children[k].string.includes("DNP")) {
+                                        console.info(definitions.children[i].children[j].children[k].uid);
+                                        if (RSWList.length > 0 && RSWList[k].type == "outline") {
+                                            //var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`);
+                                            //let RSWFdef = await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                                            //await createBlock(RSWList[i].filters, RSWFdef, 1);
+                                        } else {
+                                            //let RSWFdef = await createBlock("((" + RSWList[i].uid + "))," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                                            //await createBlock(RSWList[i].filters, RSWFdef, 1);
+                                        }
+                                    }
+                                }
+                            }
+                            // need to figure out if I'm overwriting the whole definition in the above or deleting blocks using below and then writing a replacement
+                            //window.roamAlphaAPI.deleteBlock({ "block": { "uid": definitions.children[i].children[j].uid } })
                         }
                     }
                 }
@@ -843,7 +890,15 @@ async function createWorkspace(autosaved, autoLabel, update) {
         await createBlock(rightSidebarState, ws_4v, 1);
         let ws_5 = "Main Content:";
         let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
-        if (pageName != undefined && pageName.length > 0) {
+        if (thisPage.includes("DNP")) {
+            await createBlock(thisPage, ws_5v, 1);
+            if (pageFilters != undefined) {
+                await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
+            }
+            if (pageRefFilters != undefined) {
+                await createBlock("Ref filters: " + JSON.stringify(pageRefFilters), ws_5v, 3);
+            }
+        } else if (pageName != undefined && pageName.length > 0) {
             await createBlock("[[" + pageName + "]]", ws_5v, 1);
             if (pageFilters != undefined) {
                 await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
@@ -854,17 +909,19 @@ async function createWorkspace(autosaved, autoLabel, update) {
         } else {
             await createBlock(thisPage, ws_5v, 1);
         }
-        let ws_6 = "Right Sidebar Content:";
-        let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
-        if (RSWList.length > 0) {
-            for (var i = 0; i < RSWList.length; i++) {
-                if (RSWList[i].type == "outline") {
-                    var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`);
-                    let RSWFdef = await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
-                    await createBlock(RSWList[i].filters, RSWFdef, 1);
-                } else {
-                    let RSWFdef = await createBlock("((" + RSWList[i].uid + "))," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
-                    await createBlock(RSWList[i].filters, RSWFdef, 1);
+        if (RSUpdated == false) {
+            let ws_6 = "Right Sidebar Content:";
+            let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
+            if (RSWList.length > 0) {
+                for (var i = 0; i < RSWList.length; i++) {
+                    if (RSWList[i].type == "outline") {
+                        var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`);
+                        let RSWFdef = await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                        await createBlock(RSWList[i].filters, RSWFdef, 1);
+                    } else {
+                        let RSWFdef = await createBlock("((" + RSWList[i].uid + "))," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                        await createBlock(RSWList[i].filters, RSWFdef, 1);
+                    }
                 }
             }
         }
@@ -1223,4 +1280,10 @@ async function createBlock(string, uid, order) {
 
 async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function sendConfigAlert(key) {
+    if (key == "num") {
+        alert("Please enter a number in minutes between 1 and 30. Defaulting to 5.");
+    }
 }
