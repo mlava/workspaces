@@ -929,6 +929,7 @@ async function createWorkspace(autosaved, autoLabel, update) {
 
     async function updateAutoWS(autoLabel) {
         var secHeaderUID = undefined;
+
         console.info("Autosaving workspace");
         // write or update autosave workspace definition to Workspaces configuration page
         let parentUID = definitions.uid;
@@ -940,50 +941,223 @@ async function createWorkspace(autosaved, autoLabel, update) {
             for (var i = 0; i < definitions.children.length; i++) {
                 if (definitions.children[i].string == autosaveLabel) {
                     secHeaderUID = definitions.children[i].uid;
-                    if (definitions.children[i].hasOwnProperty("children")) {
+                    if (definitions.children[i].hasOwnProperty("children")) { // there is already an autosaved definition
                         for (var j = 0; j < definitions.children[i].children.length; j++) {
-                            window.roamAlphaAPI.deleteBlock({ "block": { "uid": definitions.children[i].children[j].uid } })
+                            // check and update if needed - left sidebar
+                            if (definitions.children[i].children[j].string.startsWith("Left Sidebar:")) {
+                                if (definitions.children[i].children[j].hasOwnProperty("children")) {
+                                    if (definitions.children[i].children[j].children[0].string != leftSidebarState) { // only update if different
+                                        window.roamAlphaAPI.updateBlock({
+                                            "block": {
+                                                "uid": definitions.children[i].children[j].children[0].uid,
+                                                "string": leftSidebarState
+                                            }
+                                        });
+                                        console.info("Workspaces - autoupdated left sidebar state");
+                                    }
+                                }
+                            }
+                            // check and update if needed - right sidebar
+                            if (definitions.children[i].children[j].string.startsWith("Right Sidebar:")) {
+                                if (definitions.children[i].children[j].hasOwnProperty("children")) {
+                                    if (definitions.children[i].children[j].children[0].string != rightSidebarState) { // only update if different
+                                        window.roamAlphaAPI.updateBlock({
+                                            "block": {
+                                                "uid": definitions.children[i].children[j].children[0].uid,
+                                                "string": rightSidebarState
+                                            }
+                                        });
+                                        console.info("Workspaces - autoupdated right sidebar state");
+                                    }
+                                }
+                            }
+                            // check and update if needed - main content
+                            if (definitions.children[i].children[j].string.startsWith("Main Content:")) {
+                                var jsonPageFilters;
+                                if (pageFilters == undefined) {
+                                    jsonPageFilters = JSON.stringify({ "includes": [], "removes": [] });
+                                } else {
+                                    jsonPageFilters = JSON.stringify(pageFilters);
+                                }
+                                var jsonPageRefFilters;
+                                if (pageRefFilters == undefined) {
+                                    jsonPageRefFilters = JSON.stringify({ "includes": [], "removes": [] });
+                                } else {
+                                    jsonPageRefFilters = JSON.stringify(pageRefFilters);
+                                }
+                                if (definitions.children[i].children[j].hasOwnProperty("children")) {
+                                    if (pageName != undefined && pageName.length > 0 && definitions.children[i].children[j].children[0].string != "[[" + pageName + "]]") { // only update if different
+                                        window.roamAlphaAPI.updateBlock({
+                                            "block": {
+                                                "uid": definitions.children[i].children[j].children[0].uid,
+                                                "string": "[[" + pageName + "]]"
+                                            }
+                                        });
+                                        console.info("Workspaces - autoupdated main content state");
+                                    } else if (definitions.children[i].children[j].children[0].string != "[[" + pageName + "]]") {
+                                        window.roamAlphaAPI.updateBlock({
+                                            "block": {
+                                                "uid": definitions.children[i].children[j].children[0].uid,
+                                                "string": pageName
+                                            }
+                                        });
+                                    }
+                                    if (definitions.children[i].children[j].children[0].hasOwnProperty("children")) {
+                                        if (definitions.children[i].children[j].children[0].children.length < 2) {
+                                            if (!definitions.children[i].children[j].children[0].children[0].string.startsWith('Ref filters:')) {
+                                                window.roamAlphaAPI.updateBlock({
+                                                    "block": {
+                                                        "uid": definitions.children[i].children[j].children[0].children[0].uid,
+                                                        "string": jsonPageFilters
+                                                    }
+                                                });
+                                                await createBlock("Ref filters: " + jsonPageRefFilters, definitions.children[i].children[j].children[0].uid, 1);
+                                            } else {
+                                                window.roamAlphaAPI.updateBlock({
+                                                    "block": {
+                                                        "uid": definitions.children[i].children[j].children[0].children[0].uid,
+                                                        "string": "Ref filters: " + jsonPageRefFilters
+                                                    }
+                                                });
+                                                await createBlock(jsonPageFilters, definitions.children[i].children[j].children[0].uid, 0);
+                                            }
+                                        } else {
+                                            for (var l = 0; l < definitions.children[i].children[j].children[0].children.length; l++) {
+                                                if (!definitions.children[i].children[j].children[0].children[l].string.startsWith('Ref filters:')) {
+                                                    window.roamAlphaAPI.updateBlock({
+                                                        "block": {
+                                                            "uid": definitions.children[i].children[j].children[0].children[l].uid,
+                                                            "string": jsonPageFilters
+                                                        }
+                                                    });
+                                                } else {
+                                                    window.roamAlphaAPI.updateBlock({
+                                                        "block": {
+                                                            "uid": definitions.children[i].children[j].children[0].children[l].uid,
+                                                            "string": "Ref filters: " + jsonPageRefFilters
+                                                        }
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        await createBlock(jsonPageFilters, definitions.children[i].children[j].children[0].uid, 0);
+                                        await createBlock("Ref filters: " + jsonPageRefFilters, definitions.children[i].children[j].children[0].uid, 1);
+                                    }
+                                } else {
+                                    if (pageName != undefined && pageName.length > 0) {
+                                        let newPage = await createBlock("[[" + pageName + "]]", definitions.children[i].children[j].uid, 0);
+
+                                        await createBlock(jsonPageFilters, newPage, 0);
+                                        await createBlock("Ref filters: " + jsonPageRefFilters, newPage, 1);
+                                    }
+                                }
+                            }
+                            // check and update if needed - right sidebar content
+                            if (definitions.children[i].children[j].string.startsWith("Right Sidebar Content:")) {
+                                if (RSWList.length > 0) { 
+                                    var diff, leng;
+                                    // first handle mismatched list lengths (new or removed RSB items)
+                                    if (definitions.children[i].children[j].hasOwnProperty("children") && definitions.children[i].children[j].children.length > RSWList.length) {
+                                        for (var n = RSWList.length; n < definitions.children[i].children[j].children.length; n++) {
+                                            await window.roamAlphaAPI.deleteBlock({ "block": { "uid": definitions.children[i].children[j].children[n].uid } })
+                                        }
+                                    }
+                                    if (definitions.children[i].children[j].hasOwnProperty("children")) {
+                                        diff = RSWList.length - definitions.children[i].children[j].children.length;
+                                    } else {
+                                        diff = RSWList.length;
+                                    }
+                                    console.info("diff: " + diff);
+                                    if (diff != undefined) {
+                                        leng = RSWList.length - diff;
+                                    } else {
+                                        leng = RSWList.length;
+                                    }
+                                    console.info("leng: " + leng);
+                                    for (var k = 0; k < RSWList.length; k++) {
+                                        var RSWFdef;
+                                        if (RSWList[k].type == "outline") {
+                                            var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[k].uid}"] [?b :node/title ?title]]`);
+                                            RSWFdef = "[[" + pageName1 + "]]," + RSWList[k].type + "," + RSWList[k].collapsed + "";
+                                        } else {
+                                            RSWFdef = "((" + RSWList[k].uid + "))," + RSWList[k].type + "," + RSWList[k].collapsed + "";
+                                        }
+                                        if (k < leng) {
+                                            if (RSWFdef != definitions.children[i].children[j].children[k].string) {
+                                                await window.roamAlphaAPI.updateBlock({
+                                                    "block": {
+                                                        "uid": definitions.children[i].children[j].children[k].uid,
+                                                        "string": RSWFdef
+                                                    }
+                                                })
+                                            }
+                                            if (definitions.children[i].children[j].children[k].hasOwnProperty("children")) {
+                                                if (definitions.children[i].children[j].children[k].children[0].string != RSWList[k].filters) {
+                                                    await window.roamAlphaAPI.updateBlock({
+                                                        "block": {
+                                                            "uid": definitions.children[i].children[j].children[k].children[0].uid,
+                                                            "string": RSWList[k].filters
+                                                        }
+                                                    })
+                                                }
+                                            } else {
+                                                await createBlock(RSWList[k].filters, definitions.children[i].children[j].children[k].uid, 0);
+                                            }
+                                        } else {
+                                            let newblock = await createBlock(RSWFdef, definitions.children[i].children[j].uid, k);
+                                            await createBlock(RSWList[k].filters, newblock, 0);
+                                        }
+                                    }
+                                } else {
+                                    // delete any RSB items in definition as they've all been removed
+                                    if (definitions.children[i].children[j].hasOwnProperty("children")) {
+                                        for (var m = 0; m < definitions.children[i].children[j].children.length; m++) {
+                                            await window.roamAlphaAPI.deleteBlock({ "block": { "uid": definitions.children[i].children[j].children[m].uid } })
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         } else {
             order = 1;
-        }
-
-        if (secHeaderUID == undefined) {
-            secHeaderUID = await createBlock(autosaveLabel, parentUID, order);
-        }
-        let ws_3 = "Left Sidebar:";
-        let ws_3v = await createBlock(ws_3, secHeaderUID, 0);
-        await createBlock(leftSidebarState, ws_3v, 1);
-        let ws_4 = "Right Sidebar:";
-        let ws_4v = await createBlock(ws_4, secHeaderUID, 1);
-        await createBlock(rightSidebarState, ws_4v, 1);
-        let ws_5 = "Main Content:";
-        let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
-        if (pageName != undefined && pageName.length > 0) {
-            await createBlock("[[" + pageName + "]]", ws_5v, 1);
-            if (pageFilters != undefined) {
-                await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
+            if (secHeaderUID == undefined) {
+                secHeaderUID = await createBlock(autosaveLabel, parentUID, order);
             }
-            if (pageRefFilters != undefined) {
-                await createBlock("Ref filters: " + JSON.stringify(pageRefFilters), ws_5v, 3);
+            let ws_3 = "Left Sidebar:";
+            let ws_3v = await createBlock(ws_3, secHeaderUID, 0);
+            await createBlock(leftSidebarState, ws_3v, 1);
+            let ws_4 = "Right Sidebar:";
+            let ws_4v = await createBlock(ws_4, secHeaderUID, 1);
+            await createBlock(rightSidebarState, ws_4v, 1);
+            let ws_5 = "Main Content:";
+            let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
+            if (pageName != undefined && pageName.length > 0) {
+                await createBlock("[[" + pageName + "]]", ws_5v, 1);
+                if (pageFilters != undefined) {
+                    await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
+                }
+                if (pageRefFilters != undefined) {
+                    await createBlock("Ref filters: " + JSON.stringify(pageRefFilters), ws_5v, 3);
+                }
+            } else {
+                await createBlock(thisPage, ws_5v, 1);
             }
-        } else {
-            await createBlock(thisPage, ws_5v, 1);
-        }
-        let ws_6 = "Right Sidebar Content:";
-        let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
-        if (RSWList.length > 0) {
-            for (var i = 0; i < RSWList.length; i++) {
-                if (RSWList[i].type == "outline") {
-                    var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`);
-                    let RSWFdef = await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
-                    await createBlock(RSWList[i].filters, RSWFdef, 1);
-                } else {
-                    let RSWFdef = await createBlock("((" + RSWList[i].uid + "))," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
-                    await createBlock(RSWList[i].filters, RSWFdef, 1);
+            let ws_6 = "Right Sidebar Content:";
+            let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
+            if (RSWList.length > 0) {
+                for (var i = 0; i < RSWList.length; i++) {
+                    if (RSWList[i].type == "outline") {
+                        var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`);
+                        let RSWFdef = await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                        await createBlock(RSWList[i].filters, RSWFdef, 1);
+                    } else {
+                        let RSWFdef = await createBlock("((" + RSWList[i].uid + "))," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                        await createBlock(RSWList[i].filters, RSWFdef, 1);
+                    }
                 }
             }
         }

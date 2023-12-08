@@ -7,6 +7,7 @@
     "build": "webpack"
   },
   "author": "Mark Lavercombe",
+  "mode": "development",
   "license": "ISC",
   "devDependencies": {
     "webpack": "^5.74.0",
