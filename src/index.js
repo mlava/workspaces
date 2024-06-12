@@ -1302,7 +1302,7 @@ async function gotoWorkspace(workspace) {
 
         if (rightSidebarContent != undefined) {
             // remove any pre-existing right sidebar content
-            let rightSidebarWindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
+            let rightSidebarWindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows().filter(w => !(w["pinned?"] || w["pinned-to-top?"]));
             if (rightSidebarWindows.length > 0) {
                 for (var i = 0; i < rightSidebarWindows.length; i++) {
                     window.roamAlphaAPI.ui.rightSidebar.removeWindow({ "window": { "type": rightSidebarWindows[i]['type'], "block-uid": rightSidebarWindows[i]['block-uid'] || rightSidebarWindows[i]['page-uid'] || rightSidebarWindows[i]['mentions-uid'] } }) // thanks to Matt Vogel and his Clear Right Sidebar extension as I couldn't quite get this to work as intended until looking at his code - used with permission
