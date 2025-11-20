@@ -1,14 +1,14 @@
 Create workspaces that you can automatically open with the click of a button.
 
-**Breaking Change:**
+**New:**
+- Support Extended Focus Mode extension! Allows the workspace definition to include whether Focus Mode is on or off, and automatically create the setting when opening a workspace.
+- Support Roam Research Zen mode! Allows the workspace definition to include whether Zen mode is on or off, and automatically create the setting when opening a workspace.
+  
+*Previously:*
 - Add all workspaces to Command Palette, and by extension, Roam Research hotkeys can now be defined for each workspace.
   - removed Keyboard shortcut from definitions for new workspaces. They will be ignored if defined on existing workspaces. Please use Roam Research hotkeys via Settings instead.
-  
-**New:**
 - Settings option to turn on or off the Right Sidebar state save function of the Sidebar extension. Keep switched off if you don't want sidebar to open on pageload.
 - Option to hide icon/menu from the Roam topbar altogether. You will need to trigger the Workspace selection modal via a new Command Palette 'Open Workspace' command.
-
-**Recent:**
 - Option to keep the 'traditional' layout with a dropdown menu in the Roam topbar if you have more than one Workspace defined, or to simply have a button that opens a modal to select. This is designed to reduce clutter in the topbar for those who prefer things nice and neat! If you like the older style, turn the switch for 'Topbar Menu Layout' to the on position.
 - Addition of Autopin option - if switched on, any block or page added to the Right Sidebar will be automatically pinned.
 - David Vargas has merged his Sidebar roamjs.com extension into Workspaces. For details, see below. Thanks David!

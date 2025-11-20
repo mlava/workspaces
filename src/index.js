@@ -343,6 +343,12 @@ export default {
                 let ws_8 = "Custom CSS:";
                 let ws_8v = await createBlock(ws_8, secHeaderUID, 4);
                 await createBlock("```css\nplace any custom css in this code block```", ws_8v, 1);
+                let ws_9 = "Zen Mode:";
+                let ws_9v = await createBlock(ws_9, secHeaderUID, 5);
+                await createBlock("off", ws_9v, 1);
+                let ws_10 = "Extended Focus Mode:";
+                let ws_10v = await createBlock(ws_10, secHeaderUID, 6);
+                await createBlock("off", ws_10v, 1);
                 await window.roamAlphaAPI.ui.mainWindow.openPage({ page: { uid: newUid } });
 
                 pullBlock = headerUID;
@@ -672,9 +678,9 @@ async function createWorkspace(autosaved, autoLabel, update) {
         }
     }
 
+    var RSWList = [];
     var RSwindows = await window.roamAlphaAPI.ui.rightSidebar.getWindows();
     if (RSwindows) {
-        var RSWList = [];
         for (var i = 0; i < RSwindows.length; i++) {
             if (RSwindows[i]['type'] == "block") {
                 let RSWFilters = await window.roamAlphaAPI.ui.filters.getSidebarWindowFilters({ "window": { "block-uid": RSwindows[i]['block-uid'], "type": RSwindows[i]['type'] } });
@@ -688,6 +694,8 @@ async function createWorkspace(autosaved, autoLabel, update) {
             }
         }
     }
+    const zenModeState = isZenMode() ? "on" : "off";
+    const efmModeState = isExtendedFocusMode() ? "on" : "off";
 
     // get Workspaces configuration page and find the spot to write new config 
     let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid ] ]`);
@@ -835,6 +843,12 @@ async function createWorkspace(autosaved, autoLabel, update) {
         let ws_8 = "Custom CSS:";
         let ws_8v = await createBlock(ws_8, secHeaderUID, 5);
         await createBlock("```css\nplace any custom css in this code block```", ws_8v, 1);
+        let ws_9 = "Zen Mode:";
+        let ws_9v = await createBlock(ws_9, secHeaderUID, 6);
+        await createBlock(zenModeState, ws_9v, 1);
+        let ws_10 = "Extended Focus Mode:";
+        let ws_10v = await createBlock(ws_10, secHeaderUID, 7);
+        await createBlock(efmModeState, ws_10v, 1);
     }
 
     async function updateWS(secHeaderUID) {
@@ -925,16 +939,65 @@ async function createWorkspace(autosaved, autoLabel, update) {
                 }
             }
         }
+        let ws_8 = "Zen Mode:";
+        let ws_8v = await createBlock(ws_8, secHeaderUID, 6);
+        await createBlock(zenModeState, ws_8v, 1);
+        let ws_9 = "Extended Focus Mode:";
+        let ws_9v = await createBlock(ws_9, secHeaderUID, 7);
+        await createBlock(efmModeState, ws_9v, 1);
     }
 
     async function updateAutoWS(autoLabel) {
         var secHeaderUID = undefined;
+        var zenFound = false;
+        var efmFound = false;
 
         console.info("Autosaving workspace");
         // write or update autosave workspace definition to Workspaces configuration page
         let parentUID = definitions.uid;
         var order;
         var autosaveLabel = "* " + autoLabel.toString();
+        async function writeAutosaveDefinition(secHeaderUID) {
+            let ws_3 = "Left Sidebar:";
+            let ws_3v = await createBlock(ws_3, secHeaderUID, 0);
+            await createBlock(leftSidebarState, ws_3v, 1);
+            let ws_4 = "Right Sidebar:";
+            let ws_4v = await createBlock(ws_4, secHeaderUID, 1);
+            await createBlock(rightSidebarState, ws_4v, 1);
+            let ws_5 = "Main Content:";
+            let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
+            if (pageName != undefined && pageName.length > 0) {
+                await createBlock("[[" + pageName + "]]", ws_5v, 1);
+                if (pageFilters != undefined) {
+                    await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
+                }
+                if (pageRefFilters != undefined) {
+                    await createBlock("Ref filters: " + JSON.stringify(pageRefFilters), ws_5v, 3);
+                }
+            } else {
+                await createBlock(thisPage, ws_5v, 1);
+            }
+            let ws_6 = "Right Sidebar Content:";
+            let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
+            if (RSWList.length > 0) {
+                for (var i = 0; i < RSWList.length; i++) {
+                    if (RSWList[i].type == "outline") {
+                        var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`);
+                        let RSWFdef = await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                        await createBlock(RSWList[i].filters, RSWFdef, 1);
+                    } else {
+                        let RSWFdef = await createBlock("((" + RSWList[i].uid + "))," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
+                        await createBlock(RSWList[i].filters, RSWFdef, 1);
+                    }
+                }
+            }
+            let ws_9 = "Zen Mode:";
+            let ws_9v = await createBlock(ws_9, secHeaderUID, 6);
+            await createBlock(zenModeState, ws_9v, 1);
+            let ws_10 = "Extended Focus Mode:";
+            let ws_10v = await createBlock(ws_10, secHeaderUID, 7);
+            await createBlock(efmModeState, ws_10v, 1);
+        }
 
         if (definitions.hasOwnProperty("children")) {
             order = 1 + (definitions.children.length);
@@ -1118,48 +1181,59 @@ async function createWorkspace(autosaved, autoLabel, update) {
                                     }
                                 }
                             }
+                            if (definitions.children[i].children[j].string.startsWith("Zen Mode:")) {
+                                zenFound = true;
+                                if (definitions.children[i].children[j].hasOwnProperty("children")) {
+                                    if (definitions.children[i].children[j].children[0].string != zenModeState) { // only update if different
+                                        await window.roamAlphaAPI.updateBlock({
+                                            "block": {
+                                                "uid": definitions.children[i].children[j].children[0].uid,
+                                                "string": zenModeState
+                                            }
+                                        });
+                                    }
+                                } else {
+                                    await createBlock(zenModeState, definitions.children[i].children[j].uid, 0);
+                                }
+                            }
+                            if (definitions.children[i].children[j].string.startsWith("Extended Focus Mode:")) {
+                                efmFound = true;
+                                if (definitions.children[i].children[j].hasOwnProperty("children")) {
+                                    if (definitions.children[i].children[j].children[0].string != efmModeState) { // only update if different
+                                        await window.roamAlphaAPI.updateBlock({
+                                            "block": {
+                                                "uid": definitions.children[i].children[j].children[0].uid,
+                                                "string": efmModeState
+                                            }
+                                        });
+                                    }
+                                } else {
+                                    await createBlock(efmModeState, definitions.children[i].children[j].uid, 0);
+                                }
+                            }
+                        }
+                        if (zenFound == false) {
+                            let wsZen = await createBlock("Zen Mode:", secHeaderUID, 6);
+                            await createBlock(zenModeState, wsZen, 1);
+                        }
+                        if (efmFound == false) {
+                            let wsEFM = await createBlock("Extended Focus Mode:", secHeaderUID, 7);
+                            await createBlock(efmModeState, wsEFM, 1);
                         }
                     }
+                    // if autosave definition exists, no need to create a new one
                 }
+            }
+            if (secHeaderUID == undefined) { // no existing autosave definition, so create one
+                secHeaderUID = await createBlock(autosaveLabel, parentUID, order);
+                await writeAutosaveDefinition(secHeaderUID);
             }
         } else {
             order = 1;
             if (secHeaderUID == undefined) {
                 secHeaderUID = await createBlock(autosaveLabel, parentUID, order);
             }
-            let ws_3 = "Left Sidebar:";
-            let ws_3v = await createBlock(ws_3, secHeaderUID, 0);
-            await createBlock(leftSidebarState, ws_3v, 1);
-            let ws_4 = "Right Sidebar:";
-            let ws_4v = await createBlock(ws_4, secHeaderUID, 1);
-            await createBlock(rightSidebarState, ws_4v, 1);
-            let ws_5 = "Main Content:";
-            let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
-            if (pageName != undefined && pageName.length > 0) {
-                await createBlock("[[" + pageName + "]]", ws_5v, 1);
-                if (pageFilters != undefined) {
-                    await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
-                }
-                if (pageRefFilters != undefined) {
-                    await createBlock("Ref filters: " + JSON.stringify(pageRefFilters), ws_5v, 3);
-                }
-            } else {
-                await createBlock(thisPage, ws_5v, 1);
-            }
-            let ws_6 = "Right Sidebar Content:";
-            let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
-            if (RSWList.length > 0) {
-                for (var i = 0; i < RSWList.length; i++) {
-                    if (RSWList[i].type == "outline") {
-                        var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`);
-                        let RSWFdef = await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
-                        await createBlock(RSWList[i].filters, RSWFdef, 1);
-                    } else {
-                        let RSWFdef = await createBlock("((" + RSWList[i].uid + "))," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
-                        await createBlock(RSWList[i].filters, RSWFdef, 1);
-                    }
-                }
-            }
+            await writeAutosaveDefinition(secHeaderUID);
         }
     }
 }
@@ -1192,6 +1266,8 @@ async function gotoWorkspace(workspace) {
         var mainRefFilters = undefined;
         var rightSidebarContent = undefined;
         var workspaceCSS = undefined;
+        var zenMode = undefined;
+        var efmMode = undefined;
 
         if (thisDefinition.children.length > 0) {
             for (var i = 0; i < thisDefinition.children.length; i++) {
@@ -1232,6 +1308,14 @@ async function gotoWorkspace(workspace) {
                                 workspaceCSS = cssBlock.substring(6).slice(0, -3);
                             }
                         }
+                    }
+                } else if (thisDefinition.children[i].string.startsWith("Zen Mode:")) {
+                    if (thisDefinition.children[i].hasOwnProperty("children") && thisDefinition.children[i].children[0]?.string) {
+                        zenMode = thisDefinition.children[i].children[0].string.toLowerCase();
+                    }
+                } else if (thisDefinition.children[i].string.startsWith("Extended Focus Mode:")) {
+                    if (thisDefinition.children[i].hasOwnProperty("children") && thisDefinition.children[i].children[0]?.string) {
+                        efmMode = thisDefinition.children[i].children[0].string.toLowerCase();
                     }
                 }
             }
@@ -1411,6 +1495,10 @@ async function gotoWorkspace(workspace) {
                 head.appendChild(newStyles);
             }
         }
+        const desiredZen = zenMode ? zenMode == "on" : false;
+        await setZenMode(desiredZen);
+        const desiredEFM = efmMode ? efmMode == "on" : false;
+        await setExtendedFocusMode(desiredEFM);
     }
 }
 
@@ -1423,6 +1511,61 @@ async function clearWorkspaceCSS() {
 }
 
 // helper functions
+function isZenMode() {
+    const zenEl = document.querySelector(".rm-topbar-zen");
+    const topbar = document.querySelector(".rm-topbar");
+    const zenVisible = zenEl && getComputedStyle(zenEl).display !== "none";
+    const topbarHidden = topbar && getComputedStyle(topbar).display === "none";
+    return !!(zenVisible || topbarHidden);
+}
+
+function isExtendedFocusMode() {
+    try {
+        return !!window.extendedFocusMode?.isOn?.();
+    } catch (e) {
+        return false;
+    }
+}
+
+async function setZenMode(targetOn) {
+    const desired = !!targetOn;
+    if (!document.querySelector(".rm-topbar") && !document.querySelector(".rm-topbar-zen")) {
+        return;
+    }
+    if (isZenMode() === desired) return;
+
+    const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+    const sendToggle = async () => {
+        const targets = [document, document.body, window].filter(Boolean);
+        (document.body || document.documentElement)?.focus?.();
+        const modInit = { key: "k", code: "KeyK", metaKey: isMac, ctrlKey: !isMac, bubbles: true, cancelable: true, composed: true, keyCode: 75, which: 75, repeat: false };
+        targets.forEach(t => t.dispatchEvent(new KeyboardEvent("keydown", modInit)));
+        targets.forEach(t => t.dispatchEvent(new KeyboardEvent("keyup", modInit)));
+        await sleep(250);
+        const zInit = { key: "z", code: "KeyZ", bubbles: true, cancelable: true, composed: true, keyCode: 90, which: 90, repeat: false };
+        targets.forEach(t => t.dispatchEvent(new KeyboardEvent("keydown", zInit)));
+        targets.forEach(t => t.dispatchEvent(new KeyboardEvent("keypress", zInit)));
+        targets.forEach(t => t.dispatchEvent(new KeyboardEvent("keyup", zInit)));
+    };
+
+    await sendToggle();
+    await sleep(350);
+    if (isZenMode() !== desired) {
+        await sendToggle();
+        await sleep(350);
+    }
+}
+
+async function setExtendedFocusMode(targetOn) {
+    if (!window.extendedFocusMode || !window.extendedFocusMode.toggle) return;
+    const desired = !!targetOn;
+    try {
+        if (isExtendedFocusMode() === desired) return;
+        await window.extendedFocusMode.toggle(desired);
+        await sleep(200);
+    } catch (e) { }
+}
+
 function convertToRoamDate(dateString) {
     var parsedDate = dateString.split('-');
     var year = parsedDate[2];
