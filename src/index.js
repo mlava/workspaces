@@ -4,6 +4,7 @@ var pullBlock = undefined;
 var auto = false;
 var key;
 let observer = undefined;
+let roamJSSidebarFeatures = undefined;
 var checkInterval = 0;
 var checkEveryMinutes, autoLabel, autoMenu;
 let topbarMenuLayout;
@@ -83,7 +84,15 @@ export default {
                     id: "ws-go-to-page",
                     name: "Go to Page Links",
                     description: "Whether or not to show go to page links from Page sidebar windows",
-                    action: { type: "switch" },
+                    action: {
+                        type: "switch",
+                        onChange: (evt) => {
+                            //extensionAPI.settings.set("ws-go-to-page", evt?.target?.checked);
+                            setTimeout(() => {
+                                roamJSSidebarFeatures?.refreshGoToPageLinks?.();
+                            }, 500);
+                        },
+                    },
                 },
                 {
                     id: "ws-exp-col",
@@ -91,7 +100,12 @@ export default {
                     description: "Whether or not to display the expand/collapse all windows button on the top of the sidebar",
                     action: {
                         type: "switch",
-                        onChange: (evt) => { enableECACP(evt); }
+                        onChange: (evt) => {
+                            enableECACP(evt);
+                            setTimeout(() => {
+                                roamJSSidebarFeatures?.refreshExpandCollapseIcon?.();
+                            }, 50);
+                        },
                     },
                 },
             ]
@@ -111,32 +125,12 @@ export default {
             callback: () => workspaceSelect()
         });
 
-        if (extensionAPI.settings.get("ws-exp-col") == true) { // onload
-            enableECACP(false, true);
-        } else {
-            extensionAPI.ui.commandPalette.addCommand({
-                label: "Toggle expand/collapse all right sidebar content",
-                callback: () => {
-                    let RSContent = document.querySelectorAll(".rm-sidebar-window .window-headers");
-                    if (RSContent[0].innerHTML.includes("rm-caret-open")) { // collapse all windows 
-                        document.querySelectorAll(
-                            ".rm-sidebar-window .window-headers .rm-caret-open"
-                        )
-                            .forEach((e) => e.click());
-                    } else { // expand all windows
-                        document.querySelectorAll(".rm-sidebar-window .window-headers .rm-caret-closed").forEach(
-                            (e) => e.click()
-                        );
-                    }
-                }
-            });
-        }
-
-        function enableECACP(evt, state) {
+        async function enableECACP(evt, state) {
             if ((evt != undefined && evt?.target?.checked == true) || state == true) {
                 extensionAPI.ui.commandPalette.removeCommand({
                     label: "Toggle expand/collapse all right sidebar content",
                 });
+                roamJSSidebarFeatures?.refreshExpandCollapseIcon?.();
                 // CP option for expand/collapse all from sidebar.js
                 extensionAPI.ui.commandPalette.addCommand({
                     label: "Toggle expand/collapse all right sidebar content",
@@ -571,9 +565,36 @@ export default {
             addWorkspaceOpenedWatch: addWorkspaceOpenedWatch,
             removeWorkspaceOpenedWatch: removeWorkspaceOpenedWatch,
         }*/
-        const unloadRoamJSSidebarFeatures = initializeRoamJSSidebarFeatures(extensionAPI);
+        roamJSSidebarFeatures = initializeRoamJSSidebarFeatures(extensionAPI);
+        if (extensionAPI.settings.get("ws-exp-col") == true) { // onload
+            enableECACP(false, true);
+            setTimeout(() => {
+                roamJSSidebarFeatures?.refreshExpandCollapseIcon?.();
+            }, 100);
+        } else {
+            extensionAPI.ui.commandPalette.addCommand({
+                label: "Toggle expand/collapse all right sidebar content",
+                callback: () => {
+                    let RSContent = document.querySelectorAll(".rm-sidebar-window .window-headers");
+                    if (RSContent[0].innerHTML.includes("rm-caret-open")) { // collapse all windows 
+                        document.querySelectorAll(
+                            ".rm-sidebar-window .window-headers .rm-caret-open"
+                        )
+                            .forEach((e) => e.click());
+                    } else { // expand all windows
+                        document.querySelectorAll(".rm-sidebar-window .window-headers .rm-caret-closed").forEach(
+                            (e) => e.click()
+                        );
+                    }
+                }
+            });
+        }
+        const setting = extensionAPI.settings.get("ws-go-to-page");
+        if (setting === true || setting === "true") {
+            roamJSSidebarFeatures?.refreshGoToPageLinks?.();
+        }
         return () => {
-            unloadRoamJSSidebarFeatures();
+            roamJSSidebarFeatures?.();
             if (document.getElementById("workspaces")) {
                 document.getElementById("workspaces").remove();
             }

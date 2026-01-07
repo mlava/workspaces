@@ -1,6 +1,7 @@
 Create workspaces that you can automatically open with the click of a button.
 
 **New:**
+- Updated to fix bugs with go-to-page links and expand/collapse all toggle and icon placement in right sidebar.
 - Support Extended Focus Mode extension! Allows the workspace definition to include whether Focus Mode is on or off, and automatically create the setting when opening a workspace.
 - Support Roam Research Zen mode! Allows the workspace definition to include whether Zen mode is on or off, and automatically create the setting when opening a workspace.
   

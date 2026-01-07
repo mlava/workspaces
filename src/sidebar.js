@@ -56,6 +56,12 @@ const MinimalIcon = ({
 
 const initializeRoamJSSidebarFeatures = (extensionAPI) => {
   const unloads = new Set();
+  const expColContainerSelector =
+    "[data-roamjs-sidebar-expcolall-container]";
+  const goToPageContainerSelector =
+    "[data-roamjs-sidebar-link-container]";
+  let goToPageRefreshAttempts = 0;
+  let goToPageRefreshInFlight = false;
 
   const renderIcon = ({ p, ...props }) => {
     window.ReactDOM.render(window.React.createElement(MinimalIcon, props), p);
@@ -64,93 +70,194 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
       p.remove();
     });
   };
-  const rightSidebarCallback = (rightSidebar) => {
-    if (rightSidebar && !rightSidebar.hasAttribute("data-roamjs-sidebar")) {
-      rightSidebar.setAttribute("data-roamjs-sidebar", "true");
+  const getRightSidebarTopbar = (rightSidebar) =>
+    rightSidebar
+      ?.querySelector(".bp3-icon-menu-open")
+      ?.closest(".flex-h-box") ||
+    document
+      .querySelector("#right-sidebar .bp3-icon-menu-open")
+      ?.closest(".flex-h-box") ||
+    document.querySelector(".bp3-icon-menu-open")?.closest(".flex-h-box");
 
-      const rightSidebarTopbar =
-        rightSidebar.getElementsByClassName("bp3-icon-menu-open")?.[0]
-          ?.parentElement?.parentElement?.firstElementChild;
-      if (
-        rightSidebarTopbar &&
-        extensionAPI.settings.get("ws-exp-col") &&
-        !rightSidebarTopbar.hasAttribute("data-roamjs-sidebar-expcolall")
-      ) {
-        rightSidebarTopbar.setAttribute(
-          "data-roamjs-sidebar-expcolall",
-          "true"
-        );
-        const expandCollapseContainer = document.createElement("span");
-        renderIcon({
-          p: expandCollapseContainer,
-          icon: "collapse-all",
-          tooltipContent: "Expand/Collapse all windows in sidebar",
-          toggleIcon: "expand-all",
-          onClick: () => {
-            rightSidebar
-              .querySelectorAll(
-                ".rm-sidebar-window .window-headers .rm-caret-open"
-              )
-              .forEach((e) => e.click());
-            /* Roam has a bug for non block windows
-          window.roamAlphaAPI.ui.rightSidebar.getWindows().forEach((w) => {
-            window.roamAlphaAPI.ui.rightSidebar.collapseWindow({
-              window: {
-                type: w.type,
-                "block-uid": getWindowUid(w),
-              },
-            });
+  const removeExpandCollapseIcon = (rightSidebar) => {
+    const rightSidebarTopbar = getRightSidebarTopbar(rightSidebar);
+    if (!rightSidebarTopbar) {
+      return;
+    }
+    rightSidebarTopbar
+      .querySelectorAll(expColContainerSelector)
+      .forEach((el) => el.remove());
+    rightSidebarTopbar.removeAttribute("data-roamjs-sidebar-expcolall");
+  };
+
+  const renderExpandCollapseIcon = (rightSidebar) => {
+    if (!rightSidebar) {
+      return;
+    }
+    const rightSidebarTopbar = getRightSidebarTopbar(rightSidebar);
+    const isEnabled = extensionAPI.settings.get("ws-exp-col");
+    if (!rightSidebarTopbar || !isEnabled) {
+      if (rightSidebarTopbar && !isEnabled) {
+        removeExpandCollapseIcon(rightSidebar);
+      }
+      return;
+    }
+    if (
+      rightSidebarTopbar &&
+      isEnabled &&
+      !rightSidebarTopbar.hasAttribute("data-roamjs-sidebar-expcolall")
+    ) {
+      rightSidebarTopbar.setAttribute(
+        "data-roamjs-sidebar-expcolall",
+        "true"
+      );
+      const expandCollapseContainer = document.createElement("span");
+      expandCollapseContainer.setAttribute(
+        "data-roamjs-sidebar-expcolall-container",
+        "true"
+      );
+      renderIcon({
+        p: expandCollapseContainer,
+        icon: "collapse-all",
+        tooltipContent: "Expand/Collapse all windows in sidebar",
+        toggleIcon: "expand-all",
+        onClick: () => {
+          rightSidebar
+            .querySelectorAll(
+              ".rm-sidebar-window .window-headers .rm-caret-open"
+            )
+            .forEach((e) => e.click());
+          /* Roam has a bug for non block windows
+        window.roamAlphaAPI.ui.rightSidebar.getWindows().forEach((w) => {
+          window.roamAlphaAPI.ui.rightSidebar.collapseWindow({
+            window: {
+              type: w.type,
+              "block-uid": getWindowUid(w),
+            },
           });
-          */
-          },
-          onToggleClick: () => {
-            rightSidebar.querySelectorAll(".rm-sidebar-window .window-headers .rm-caret-closed").forEach(
-              (e) => e.click()
-            );
-            /* Roam has a bug for non block windows
-          window.roamAlphaAPI.ui.rightSidebar.getWindows().forEach((w) => {
-            window.roamAlphaAPI.ui.rightSidebar.expandWindow({
-              window: {
-                type: w.type,
-                "block-uid": getWindowUid(w),
-              },
-            });
-          });
-          */
-          },
         });
+        */
+        },
+        onToggleClick: () => {
+          rightSidebar.querySelectorAll(".rm-sidebar-window .window-headers .rm-caret-closed").forEach(
+            (e) => e.click()
+          );
+          /* Roam has a bug for non block windows
+        window.roamAlphaAPI.ui.rightSidebar.getWindows().forEach((w) => {
+          window.roamAlphaAPI.ui.rightSidebar.expandWindow({
+            window: {
+              type: w.type,
+              "block-uid": getWindowUid(w),
+            },
+          });
+        });
+        */
+        },
+      });
+      const toggleButton = rightSidebarTopbar
+        .querySelector(".bp3-icon-menu-open")
+        ?.closest("button");
+      if (toggleButton) {
+        rightSidebarTopbar.insertBefore(expandCollapseContainer, toggleButton);
+      } else {
         rightSidebarTopbar.appendChild(expandCollapseContainer);
       }
+    }
+  };
 
-      const sidebarStyleObserver = new MutationObserver(() => {
-        setTimeout(() => {
-          const isOpen = localStorage.getItem("roamjs:sidebar:open");
-          const isCloseIconPresent = !!document.querySelector(
-            ".rm-topbar .bp3-icon-menu-closed"
-          );
+  const refreshExpandCollapseIcon = () => {
+    renderExpandCollapseIcon(document.getElementById("right-sidebar"));
+  };
 
-          if (isOpen && isCloseIconPresent) {
-            localStorage.removeItem("roamjs:sidebar:open");
-          } else if (!isOpen && !isCloseIconPresent) {
-            localStorage.setItem("roamjs:sidebar:open", "true");
-            if (extensionAPI.settings.get("ws-auto-focus")) {
-              const firstBlock =
-                rightSidebar.getElementsByClassName("roam-block")[0];
-              if (firstBlock) {
-                const id = firstBlock.id;
-                const blockUid = id.substring(id.length - 9, id.length);
-                const restOfHTMLId = id.substring(0, id.length - 10);
-                const windowId =
-                  restOfHTMLId.match(/^block-input-([a-zA-Z0-9_-]+)$/)?.[1] ||
-                  "";
-                window.roamAlphaAPI.ui.setBlockFocusAndSelection({
-                  location: { "block-uid": blockUid, "window-id": windowId },
-                });
-              }
-            }
+  const scheduleGoToPageRefresh = (rightSidebar) => {
+    if (goToPageRefreshInFlight) {
+      return;
+    }
+    goToPageRefreshInFlight = true;
+    goToPageRefreshAttempts = 0;
+    const target = rightSidebar || document.getElementById("right-sidebar");
+    if (!target) {
+      goToPageRefreshInFlight = false;
+      return;
+    }
+    const tryRefresh = () => {
+      const setting = extensionAPI.settings.get("ws-go-to-page");
+      if (setting === false || setting === "false") {
+        goToPageRefreshInFlight = false;
+        return true;
+      }
+      goToPageRefreshAttempts += 1;
+      refreshGoToPageLinks();
+      const hasIcons = !!document.querySelector(goToPageContainerSelector);
+      if (hasIcons || goToPageRefreshAttempts >= 60) {
+        goToPageRefreshInFlight = false;
+        return true;
+      }
+      return false;
+    };
+    const scheduleLoop = () => {
+      if (!tryRefresh()) {
+        setTimeout(scheduleLoop, 200);
+      }
+    };
+    scheduleLoop();
+    const outlineObserver = new MutationObserver(() => {
+      if (tryRefresh()) {
+        outlineObserver.disconnect();
+      }
+    });
+    outlineObserver.observe(target, { childList: true, subtree: true });
+    unloads.add(() => outlineObserver.disconnect());
+  };
+
+  const rightSidebarCallback = (rightSidebar) => {
+    if (!rightSidebar) {
+      return;
+    }
+    renderExpandCollapseIcon(rightSidebar);
+    setTimeout(() => {
+      scheduleGoToPageRefresh(rightSidebar);
+    }, 300);
+    if (!rightSidebar.hasAttribute("data-roamjs-sidebar")) {
+      rightSidebar.setAttribute("data-roamjs-sidebar", "true");
+
+  const sidebarStyleObserver = new MutationObserver(() => {
+    setTimeout(() => {
+      const isOpen = localStorage.getItem("roamjs:sidebar:open");
+      const isCloseIconPresent = !!document.querySelector(
+        ".rm-topbar .bp3-icon-menu-closed"
+      );
+      const isOpenIconPresent = !!document.querySelector(
+        ".bp3-icon-menu-open"
+      );
+
+      if (isOpen && isCloseIconPresent) {
+        localStorage.removeItem("roamjs:sidebar:open");
+      } else if (!isOpen && !isCloseIconPresent) {
+        localStorage.setItem("roamjs:sidebar:open", "true");
+        if (extensionAPI.settings.get("ws-auto-focus")) {
+          const firstBlock =
+            rightSidebar.getElementsByClassName("roam-block")[0];
+          if (firstBlock) {
+            const id = firstBlock.id;
+            const blockUid = id.substring(id.length - 9, id.length);
+            const restOfHTMLId = id.substring(0, id.length - 10);
+            const windowId =
+              restOfHTMLId.match(/^block-input-([a-zA-Z0-9_-]+)$/)?.[1] ||
+              "";
+            window.roamAlphaAPI.ui.setBlockFocusAndSelection({
+              location: { "block-uid": blockUid, "window-id": windowId },
+            });
           }
-        }, 50);
-      });
+        }
+      }
+
+      if (isOpenIconPresent) {
+        renderExpandCollapseIcon(rightSidebar);
+        scheduleGoToPageRefresh(rightSidebar);
+      }
+    }, 50);
+  });
       observer.disconnect();
 
       sidebarStyleObserver.observe(rightSidebar, { attributes: true });
@@ -231,42 +338,80 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
   });
   unloads.add(() => sidebarWindowObserver.disconnect());
 
+  const getSidebarWindowForOutline = (d) => {
+    const allWindows = window.roamAlphaAPI.ui.rightSidebar.getWindows() || [];
+    const domWindow = d.closest(".rm-sidebar-window");
+    const domWindowId =
+      domWindow?.getAttribute("data-sidebar-window-id") ||
+      domWindow?.getAttribute("data-window-id") ||
+      domWindow?.id;
+    if (domWindowId) {
+      const idNormalized = domWindowId.replace(/^sidebar-window-/, "");
+      const byId = allWindows.find((w) => w["window-id"] === domWindowId);
+      if (byId) {
+        return byId;
+      }
+      const byNormalizedId = allWindows.find(
+        (w) => w["window-id"] === idNormalized
+      );
+      if (byNormalizedId) {
+        return byNormalizedId;
+      }
+    }
+    const allDomWindows = Array.from(
+      document.querySelectorAll(".rm-sidebar-window")
+    );
+    const order = allDomWindows.indexOf(domWindow);
+    return allWindows.find((w) => w.order === order);
+  };
+
+  function updateGoToPageLink(d) {
+    const settingValue = extensionAPI.settings.get("ws-go-to-page");
+    const isEnabled = settingValue === true || settingValue === "true";
+    const sidebarWindow = getSidebarWindowForOutline(d);
+    const pageUid = sidebarWindow?.["page-uid"];
+    const h = d.querySelector("h1.rm-title-display");
+    if (!h) {
+      return;
+    }
+    if (!isEnabled || !pageUid) {
+      h.removeAttribute("data-roamjs-sidebar-link");
+      h.querySelectorAll(goToPageContainerSelector).forEach((el) =>
+        el.remove()
+      );
+      return;
+    }
+
+    const hasContainer = !!h.querySelector(goToPageContainerSelector);
+    if (!h.hasAttribute("data-roamjs-sidebar-link") || !hasContainer) {
+      const linkIconContainer = document.createElement("span");
+      linkIconContainer.setAttribute(
+        "data-roamjs-sidebar-link-container",
+        "true"
+      );
+      h.setAttribute("data-roamjs-sidebar-link", "true");
+      h.addEventListener("mousedown", (e) => {
+        if (linkIconContainer.contains(e.target)) {
+          e.stopPropagation();
+        }
+      });
+      renderIcon({
+        p: linkIconContainer,
+        tooltipContent: "Go to page",
+        onClick: () =>
+          window.roamAlphaAPI.ui.mainWindow.openPage({
+            page: { uid: pageUid },
+          }),
+        icon: "link",
+      });
+      h.appendChild(linkIconContainer);
+    }
+  }
+
   const sidebarOutlineObserver = createHTMLObserver({
     tag: "DIV",
     className: "rm-sidebar-outline",
-    callback: (d) => {
-      if (extensionAPI.settings.get("ws-go-to-page")) {
-        const allWindows = window.roamAlphaAPI.ui.rightSidebar.getWindows();
-        const allDomWindows = Array.from(
-          document.querySelectorAll(".rm-sidebar-window")
-        );
-        const order = allDomWindows.indexOf(d.closest(".rm-sidebar-window"));
-        const w = allWindows[order];
-        const pageUid = w["page-uid"];
-        if (pageUid) {
-          const linkIconContainer = document.createElement("span");
-          const h = d.querySelector("h1.rm-title-display");
-          if (h && !h.hasAttribute("data-roamjs-sidebar-link")) {
-            h.setAttribute("data-roamjs-sidebar-link", "true");
-            h.addEventListener("mousedown", (e) => {
-              if (linkIconContainer.contains(e.target)) {
-                e.stopPropagation();
-              }
-            });
-            renderIcon({
-              p: linkIconContainer,
-              tooltipContent: "Go to page",
-              onClick: () =>
-                window.roamAlphaAPI.ui.mainWindow.openPage({
-                  page: { uid: pageUid },
-                }),
-              icon: "link",
-            });
-            h.appendChild(linkIconContainer);
-          }
-        }
-      }
-    },
+    callback: updateGoToPageLink,
   });
   unloads.add(() => sidebarOutlineObserver.disconnect());
 
@@ -346,9 +491,24 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
     });
   }
 
-  return () => {
+  const unload = () => {
     unloads.forEach((u) => u());
+    const rightSidebar = document.getElementById("right-sidebar");
+    if (rightSidebar) {
+      rightSidebar.removeAttribute("data-roamjs-sidebar");
+      removeExpandCollapseIcon(rightSidebar);
+    }
   };
+
+  function refreshGoToPageLinks() {
+    document
+      .querySelectorAll(".rm-sidebar-outline")
+      .forEach(updateGoToPageLink);
+  }
+
+  unload.refreshExpandCollapseIcon = refreshExpandCollapseIcon;
+  unload.refreshGoToPageLinks = refreshGoToPageLinks;
+  return unload;
 };
 
 export default initializeRoamJSSidebarFeatures;
