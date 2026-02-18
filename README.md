@@ -43,7 +43,7 @@ TODO:
 
 2. ~~auto-save feature for current workspace~~
 
-3. API to allow other extensions to interact with Workspaces
+3. ~~API to allow other extensions to interact with Workspaces~~
 
 This extension has been merged with the previous RoamJS extension Sidebar! The following features have been brought over while the rest were made redundant due to Workspaces current featureset:
 - `Autofocus` - Whenever you open the right sidebar, your cursor will autofocus on the first block. This behavior is toggleable from your Roam Depot Settings.
