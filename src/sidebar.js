@@ -60,8 +60,216 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
     "[data-roamjs-sidebar-expcolall-container]";
   const goToPageContainerSelector =
     "[data-roamjs-sidebar-link-container]";
+  const legacySidebarOpenKey = "roamjs:sidebar:open";
+  const sidebarStateStoragePrefix = "roamjs:sidebar:state";
+  const maxSavedWindows = 50;
   let goToPageRefreshAttempts = 0;
   let goToPageRefreshInFlight = false;
+  let persistSidebarTimer = 0;
+  let persistSidebarShouldIncludeWindows = false;
+  let restoreSidebarTimer = 0;
+  let restoreSidebarAttempts = 0;
+  let restoreSidebarInFlight = false;
+
+  const isSidebarSaveEnabled = () => {
+    const value = extensionAPI.settings.get("ws-save-sidebar");
+    return value === true || value === "true";
+  };
+
+  const getGraphScopedSidebarStateKey = () => {
+    const graphName = window.roamAlphaAPI?.graph?.name || "default";
+    return `${sidebarStateStoragePrefix}:${graphName}`;
+  };
+
+  const getPersistedSidebarState = () => {
+    const key = getGraphScopedSidebarStateKey();
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    if (localStorage.getItem(legacySidebarOpenKey)) {
+      return { open: true, windows: [] };
+    }
+    return { open: false, windows: [] };
+  };
+
+  const setPersistedSidebarState = (next) => {
+    const key = getGraphScopedSidebarStateKey();
+    localStorage.setItem(key, JSON.stringify(next));
+    if (next?.open) {
+      localStorage.setItem(legacySidebarOpenKey, "true");
+    } else {
+      localStorage.removeItem(legacySidebarOpenKey);
+    }
+  };
+
+  const serializeSidebarWindows = (windows) =>
+    (windows || [])
+      .map((w, index) => {
+        const uid = getWindowUid(w);
+        if (!uid || !w?.type) {
+          return null;
+        }
+        return {
+          uid,
+          type: w.type,
+          order: Number.isFinite(w.order) ? w.order : index,
+          collapsed: !!w["collapsed?"],
+          pinned: !!(w["pinned?"] || w["pinned-to-top?"]),
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.order - b.order)
+      .slice(0, maxSavedWindows);
+
+  const writePersistedSidebarState = ({ withWindows = true } = {}) => {
+    if (!isSidebarSaveEnabled()) {
+      return;
+    }
+    const previous = getPersistedSidebarState();
+    const isCloseIconPresent = !!document.querySelector(
+      ".rm-topbar .bp3-icon-menu-closed"
+    );
+    const isOpenIconPresent = !!document.querySelector(
+      ".rm-topbar .bp3-icon-menu-open"
+    );
+    const nextOpen = isCloseIconPresent
+      ? false
+      : isOpenIconPresent
+        ? true
+        : !!previous.open;
+    const previousWindows = Array.isArray(previous.windows)
+      ? previous.windows
+      : [];
+    let windows = previousWindows;
+    let sampledWindows = previousWindows;
+    if (withWindows && window.roamAlphaAPI?.ui?.rightSidebar?.getWindows) {
+      try {
+        sampledWindows = serializeSidebarWindows(
+          window.roamAlphaAPI.ui.rightSidebar.getWindows()
+        );
+      } catch (e) {}
+    }
+    windows = sampledWindows.length ? sampledWindows : previousWindows;
+    // Prevent startup clobber: Roam can report empty windows before restore settles.
+    const shouldPreserveOpenFromPrevious =
+      !sampledWindows.length && previousWindows.length > 0;
+    const open = shouldPreserveOpenFromPrevious ? !!previous.open : nextOpen;
+    setPersistedSidebarState({
+      ...previous,
+      open,
+      windows,
+    });
+  };
+
+  const persistSidebarState = ({ withWindows = true } = {}) => {
+    if (!isSidebarSaveEnabled()) {
+      return;
+    }
+    persistSidebarShouldIncludeWindows =
+      persistSidebarShouldIncludeWindows || withWindows;
+    if (persistSidebarTimer) {
+      return;
+    }
+    persistSidebarTimer = window.setTimeout(() => {
+      const shouldIncludeWindows = persistSidebarShouldIncludeWindows;
+      persistSidebarShouldIncludeWindows = false;
+      persistSidebarTimer = 0;
+      writePersistedSidebarState({ withWindows: shouldIncludeWindows });
+    }, 120);
+  };
+
+  const restoreSidebarState = async () => {
+    if (!isSidebarSaveEnabled() || restoreSidebarInFlight) {
+      return;
+    }
+    const persisted = getPersistedSidebarState();
+    const rightSidebarApi = window.roamAlphaAPI?.ui?.rightSidebar;
+    if (!rightSidebarApi?.getWindows) {
+      return;
+    }
+    restoreSidebarInFlight = true;
+    try {
+      if (persisted?.open && rightSidebarApi.open) {
+        await rightSidebarApi.open();
+      }
+      const currentWindows = rightSidebarApi.getWindows() || [];
+      if (
+        currentWindows.length > 0 ||
+        !Array.isArray(persisted.windows) ||
+        !persisted.windows.length
+      ) {
+        return;
+      }
+      for (const [index, savedWindow] of persisted.windows.entries()) {
+        if (!savedWindow?.uid || !savedWindow?.type) {
+          continue;
+        }
+        try {
+          await rightSidebarApi.addWindow({
+            window: {
+              type: savedWindow.type,
+              "block-uid": savedWindow.uid,
+              order: index,
+            },
+          });
+          if (savedWindow.collapsed) {
+            await rightSidebarApi.collapseWindow({
+              window: {
+                type: savedWindow.type,
+                "block-uid": savedWindow.uid,
+              },
+            });
+          }
+          if (savedWindow.pinned) {
+            await rightSidebarApi.pinWindow({
+              window: {
+                type: savedWindow.type,
+                "block-uid": savedWindow.uid,
+              },
+            });
+          }
+        } catch (e) {}
+      }
+    } finally {
+      restoreSidebarInFlight = false;
+      persistSidebarState({ withWindows: true });
+    }
+  };
+
+  const scheduleSidebarStateRestore = () => {
+    if (!isSidebarSaveEnabled()) {
+      return;
+    }
+    if (restoreSidebarTimer || restoreSidebarInFlight) {
+      return;
+    }
+    restoreSidebarAttempts = 0;
+    const tryRestore = async () => {
+      const rightSidebarApi = window.roamAlphaAPI?.ui?.rightSidebar;
+      const currentWindows = rightSidebarApi?.getWindows
+        ? rightSidebarApi.getWindows() || []
+        : [];
+      if (currentWindows.length > 0) {
+        persistSidebarState({ withWindows: true });
+        restoreSidebarTimer = 0;
+        return;
+      }
+      restoreSidebarAttempts += 1;
+      if (restoreSidebarAttempts < 8) {
+        restoreSidebarTimer = window.setTimeout(tryRestore, 250);
+        return;
+      }
+      restoreSidebarTimer = 0;
+      await restoreSidebarState();
+    };
+    restoreSidebarTimer = window.setTimeout(tryRestore, 350);
+  };
 
   const renderIcon = ({ p, ...props }) => {
     window.ReactDOM.render(window.React.createElement(MinimalIcon, props), p);
@@ -215,6 +423,8 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
       return;
     }
     renderExpandCollapseIcon(rightSidebar);
+    persistSidebarState({ withWindows: true });
+    scheduleSidebarStateRestore();
     setTimeout(() => {
       scheduleGoToPageRefresh(rightSidebar);
     }, 300);
@@ -223,18 +433,24 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
 
   const sidebarStyleObserver = new MutationObserver(() => {
     setTimeout(() => {
-      const isOpen = localStorage.getItem("roamjs:sidebar:open");
+      const isOpen = !!getPersistedSidebarState().open;
       const isCloseIconPresent = !!document.querySelector(
         ".rm-topbar .bp3-icon-menu-closed"
       );
       const isOpenIconPresent = !!document.querySelector(
-        ".bp3-icon-menu-open"
+        ".rm-topbar .bp3-icon-menu-open"
       );
 
       if (isOpen && isCloseIconPresent) {
-        localStorage.removeItem("roamjs:sidebar:open");
+        setPersistedSidebarState({
+          ...getPersistedSidebarState(),
+          open: false,
+        });
       } else if (!isOpen && !isCloseIconPresent) {
-        localStorage.setItem("roamjs:sidebar:open", "true");
+        setPersistedSidebarState({
+          ...getPersistedSidebarState(),
+          open: true,
+        });
         if (extensionAPI.settings.get("ws-auto-focus")) {
           const firstBlock =
             rightSidebar.getElementsByClassName("roam-block")[0];
@@ -256,15 +472,14 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
         renderExpandCollapseIcon(rightSidebar);
         scheduleGoToPageRefresh(rightSidebar);
       }
+      persistSidebarState({ withWindows: true });
     }, 50);
   });
-      observer.disconnect();
-
       sidebarStyleObserver.observe(rightSidebar, { attributes: true });
       unloads.add(() => sidebarStyleObserver.disconnect());
 
-      if (!!localStorage.getItem("roamjs:sidebar:open") && extensionAPI.settings.get("ws-save-sidebar")) {
-        window.roamAlphaAPI.ui.rightSidebar.open();
+      if (isSidebarSaveEnabled()) {
+        scheduleSidebarStateRestore();
       }
     }
   };
@@ -278,9 +493,6 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
             : []
       )
     );
-    if (!!rightSidebar) {
-      console.log(rightSidebar);
-    }
     rightSidebarCallback(rightSidebar);
   });
   observer.observe(document.querySelector(".roam-body"), {
@@ -294,6 +506,7 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
     tag: "DIV",
     className: "rm-sidebar-window",
     callback: (d) => {
+      persistSidebarState({ withWindows: true });
       if (
         (extensionAPI.settings.get("ws-auto-filter") &&
           /^Outline of:/.test(d.firstElementChild.innerText)) || (extensionAPI.settings.get("ws-auto-pin"))
@@ -304,6 +517,9 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
         const sidebarWindow = window.roamAlphaAPI.ui.rightSidebar
           .getWindows()
           .find((w) => w.order === order);
+        if (!sidebarWindow || !sidebarWindow.type) {
+          return;
+        }
         if (extensionAPI.settings.get("ws-auto-pin")) {
           if (sidebarWindow.type == "block") {
             window.roamAlphaAPI.ui.rightSidebar.pinWindow({
@@ -492,6 +708,14 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
   }
 
   const unload = () => {
+    if (persistSidebarTimer) {
+      clearTimeout(persistSidebarTimer);
+      persistSidebarTimer = 0;
+    }
+    if (restoreSidebarTimer) {
+      clearTimeout(restoreSidebarTimer);
+      restoreSidebarTimer = 0;
+    }
     unloads.forEach((u) => u());
     const rightSidebar = document.getElementById("right-sidebar");
     if (rightSidebar) {
@@ -508,6 +732,8 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
 
   unload.refreshExpandCollapseIcon = refreshExpandCollapseIcon;
   unload.refreshGoToPageLinks = refreshGoToPageLinks;
+  unload.forcePersistSidebarState = () =>
+    writePersistedSidebarState({ withWindows: true });
   return unload;
 };
 

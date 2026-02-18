@@ -59,7 +59,7 @@ export default {
                 {
                     id: "ws-save-sidebar",
                     name: "Save Right Sidebar state",
-                    description: "Turn on to save and restore right sidebar open/close state on load",
+                    description: "Turn on to save and restore right sidebar open/close state and windows on load",
                     action: { type: "switch" },
                 },
                 {
@@ -124,7 +124,43 @@ export default {
             label: "Open Workspace select modal",
             callback: () => workspaceSelect()
         });
-
+        /*
+        extensionAPI.ui.commandPalette.addCommand({
+            label: "Debug: Log saved right sidebar state",
+            callback: () => {
+                roamJSSidebarFeatures?.forcePersistSidebarState?.();
+                const graphName = window.roamAlphaAPI?.graph?.name || "default";
+                const graphScopedKey = `roamjs:sidebar:state:${graphName}`;
+                const legacyKey = "roamjs:sidebar:open";
+                const currentWindows = window.roamAlphaAPI?.ui?.rightSidebar?.getWindows?.() || [];
+                const graphScopedRaw = localStorage.getItem(graphScopedKey);
+                let graphScopedParsed = null;
+                if (graphScopedRaw) {
+                    try {
+                        graphScopedParsed = JSON.parse(graphScopedRaw);
+                    } catch (e) {
+                        graphScopedParsed = {
+                            parseError: true,
+                            raw: graphScopedRaw,
+                        };
+                    }
+                }
+                console.info("Workspaces sidebar debug state", {
+                    graphName,
+                    graphScopedKey,
+                    graphScopedRaw,
+                    graphScopedParsed,
+                    legacyKey,
+                    legacyValue: localStorage.getItem(legacyKey),
+                    currentWindows,
+                });
+                iziToast.show({
+                    message: "Workspaces: right sidebar debug state logged to console",
+                    timeout: 3500,
+                });
+            }
+        });
+*/
         async function enableECACP(evt, state) {
             if ((evt != undefined && evt?.target?.checked == true) || state == true) {
                 extensionAPI.ui.commandPalette.removeCommand({
@@ -548,6 +584,7 @@ export default {
                     }
                 }
             }
+            registerToolAPI();
             console.info("Workspace definitions updated");
         }
 
@@ -555,16 +592,6 @@ export default {
             checkWorkspaces(before, after);
         }
 
-        /*
-        window.roamWorkspacesAPI = {
-            openWorkspace: gotoWorkspace,
-            clearWorkspaceCSS: clearWorkspaceCSS,
-            createWorkspace: createWorkspace,
-            listWorkspaces: listWorkspaces,
-            deleteWorkspace: deleteWorkspace,
-            addWorkspaceOpenedWatch: addWorkspaceOpenedWatch,
-            removeWorkspaceOpenedWatch: removeWorkspaceOpenedWatch,
-        }*/
         roamJSSidebarFeatures = initializeRoamJSSidebarFeatures(extensionAPI);
         if (extensionAPI.settings.get("ws-exp-col") == true) { // onload
             enableECACP(false, true);
@@ -605,6 +632,7 @@ export default {
                 `[:block/uid "${pullBlock}"]`,
                 pullFunction);
             observer.disconnect();
+            if (window.RoamExtensionTools) delete window.RoamExtensionTools['workspaces'];
             clearWorkspaceCSS();
             if (document.getElementById("workspaces-css-fix-roam-studio")) {
                 var head = document.getElementsByTagName("head")[0];
@@ -661,7 +689,7 @@ async function workspaceSelect() {
     });
 }
 
-async function createWorkspace(autosaved, autoLabel, update) {
+async function createWorkspace(autosaved, autoLabel, update, forcedName) {
     // get required information to define a workspace
     var leftSidebarState, rightSidebarState;
     if (document.querySelector('.rm-open-left-sidebar-btn')) {
@@ -767,6 +795,11 @@ async function createWorkspace(autosaved, autoLabel, update) {
     } else if (autosaved) {
         updateAutoWS(autoLabel);
     } else {
+        const forcedWorkspaceName = typeof forcedName === "string" ? forcedName.trim() : "";
+        if (forcedWorkspaceName.length > 0) {
+            await writeNewWS(forcedWorkspaceName);
+            return;
+        }
         iziToast.question({
             theme: 'light',
             color: 'black',
@@ -1139,7 +1172,7 @@ async function createWorkspace(autosaved, autoLabel, update) {
                             }
                             // check and update if needed - right sidebar content
                             if (definitions.children[i].children[j].string.startsWith("Right Sidebar Content:")) {
-                                if (RSWList.length > 0) { 
+                                if (RSWList.length > 0) {
                                     var diff, leng;
                                     // first handle mismatched list lengths (new or removed RSB items)
                                     if (definitions.children[i].children[j].hasOwnProperty("children") && definitions.children[i].children[j].children.length > RSWList.length) {
@@ -1529,6 +1562,86 @@ async function clearWorkspaceCSS() {
         var oldStyles = document.getElementById("workspaces-css");
         head.removeChild(oldStyles);
     }
+}
+
+// Chief of Staff API
+async function buildToolDescriptor() {
+    let pageUID = await window.roamAlphaAPI.q(`[:find ?uid :where [?e :node/title "Workspaces configuration"][?e :block/uid ?uid]]`);
+    if (!pageUID?.[0]?.[0]) return null;
+    var results = await window.roamAlphaAPI.q(`[:find (pull ?page [:block/string :block/uid :block/order {:block/children ...}]) :where [?page :block/uid "${pageUID}"]]`);
+    if (!results?.[0]?.[0]?.children) return null;
+    var definitions = null;
+    for (var i = 0; i < results[0][0].children.length; i++) {
+        if (results[0][0].children[i].string.startsWith("Workspace Definitions:")) {
+            definitions = results[0][0].children[i];
+        }
+    }
+    if (!definitions?.children || definitions.children.length === 0) return null;
+    var workspaceNames = [];
+    for (var i = 0; i < definitions.children.length; i++) {
+        var name = definitions.children[i].string;
+        if (!name.startsWith("* ")) {
+            workspaceNames.push(name);
+        }
+    }
+    if (workspaceNames.length === 0) return null;
+    return {
+        name: "Workspaces",
+        version: "1.0",
+        tools: [
+            {
+                name: "ws_open",
+                description: "Open a saved workspace by name. Restores the layout including left/right sidebar state, main content, sidebar windows, custom CSS, zen mode, and extended focus mode.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        workspace_name: {
+                            type: "string",
+                            description: "Name of the workspace to open.",
+                            enum: workspaceNames
+                        }
+                    },
+                    required: ["workspace_name"]
+                },
+                execute: async (args) => {
+                    await gotoWorkspace(args.workspace_name);
+                    return { success: true, workspace: args.workspace_name };
+                }
+            },
+            {
+                name: "ws_create_from_current_state",
+                description: "Create a new workspace from the current Roam layout state.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        workspace_name: {
+                            type: "string",
+                            description: "Name for the new workspace to create."
+                        }
+                    },
+                    required: ["workspace_name"]
+                },
+                execute: async (args) => {
+                    const workspaceName = String(args.workspace_name || "").trim();
+                    if (!workspaceName) {
+                        return { success: false, error: "Workspace name is required." };
+                    }
+                    if (workspaceNames.includes(workspaceName)) {
+                        return { success: false, error: `Workspace '${workspaceName}' already exists.` };
+                    }
+                    await createWorkspace(false, false, false, workspaceName);
+                    return { success: true, workspace: workspaceName };
+                }
+            }
+        ]
+    };
+}
+
+async function registerToolAPI() {
+    var descriptor = await buildToolDescriptor();
+    if (!descriptor) return;
+    window.RoamExtensionTools = window.RoamExtensionTools || {};
+    window.RoamExtensionTools['workspaces'] = descriptor;
 }
 
 // helper functions
