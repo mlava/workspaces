@@ -19,8 +19,20 @@
 
 .flex-items:hover {
   background: rgba(167, 182, 194, 0.3);
-  color: #182026;
   text-decoration: none;
+}
+
+#workspacesSelectMenu {
+  color: inherit;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: inherit;
+}
+
+#workspacesSelectMenu option {
+  color: initial;
+  background: initial;
 }
 
 /*
