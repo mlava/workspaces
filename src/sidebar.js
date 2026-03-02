@@ -70,10 +70,41 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
   let restoreSidebarTimer = 0;
   let restoreSidebarAttempts = 0;
   let restoreSidebarInFlight = false;
+  let dnpTrackedUid = null;
+  let dnpDismissedForDate = null;
+  let dnpMidnightTimer = 0;
 
   const isSidebarSaveEnabled = () => {
     const value = extensionAPI.settings.get("ws-save-sidebar");
     return value === true || value === "true";
+  };
+
+  const isDnpPinEnabled = () => {
+    const value = extensionAPI.settings.get("ws-pin-dnp");
+    return value === true || value === "true";
+  };
+
+  const getTodayDnpUid = () => {
+    return window.roamAlphaAPI?.util?.dateToPageUid?.(new Date());
+  };
+
+  const isDnpPinnedToTop = (uid) => {
+    const windows = window.roamAlphaAPI?.ui?.rightSidebar?.getWindows?.() || [];
+    return windows.some(
+      (w) => w.type === "outline" && w["page-uid"] === uid && w["pinned-to-top?"]
+    );
+  };
+
+  const findStaleDnpWindows = (currentUid) => {
+    const windows = window.roamAlphaAPI?.ui?.rightSidebar?.getWindows?.() || [];
+    const datePattern = /^\d{2}-\d{2}-\d{4}$/;
+    return windows.filter(
+      (w) =>
+        w.type === "outline" &&
+        w["pinned-to-top?"] &&
+        datePattern.test(w["page-uid"]) &&
+        w["page-uid"] !== currentUid
+    );
   };
 
   const getGraphScopedSidebarStateKey = () => {
@@ -707,6 +738,121 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
     });
   }
 
+  // --- Pin Today's Daily Note ---
+
+  const ensureDnpPinned = async () => {
+    const uid = getTodayDnpUid();
+    if (!uid) return;
+    if (isDnpPinnedToTop(uid)) {
+      dnpTrackedUid = uid;
+      return;
+    }
+    const stale = findStaleDnpWindows(uid);
+    for (const w of stale) {
+      try {
+        await window.roamAlphaAPI.ui.rightSidebar.removeWindow({
+          window: { type: "outline", "block-uid": w["page-uid"] },
+        });
+      } catch (e) { /* stale window may already be gone */ }
+    }
+    try {
+      await window.roamAlphaAPI.ui.rightSidebar.addWindow({
+        window: { type: "outline", "block-uid": uid },
+      });
+      await window.roamAlphaAPI.ui.rightSidebar.pinWindow({
+        window: { type: "outline", "block-uid": uid },
+        "pin-to-top?": true,
+      });
+    } catch (e) { /* sidebar may not be ready */ }
+    dnpTrackedUid = uid;
+    dnpDismissedForDate = null;
+  };
+
+  const checkAndPinDnp = async () => {
+    if (!isDnpPinEnabled()) return;
+    const uid = getTodayDnpUid();
+    if (!uid) return;
+    if (dnpDismissedForDate === uid) return;
+    if (dnpTrackedUid === uid) {
+      const windows = window.roamAlphaAPI?.ui?.rightSidebar?.getWindows?.() || [];
+      const found = windows.some(
+        (w) => w.type === "outline" && w["page-uid"] === uid
+      );
+      if (!found) {
+        dnpDismissedForDate = uid;
+        return;
+      }
+    }
+    if (dnpTrackedUid !== uid || !isDnpPinnedToTop(uid)) {
+      dnpDismissedForDate = null;
+      await ensureDnpPinned();
+    }
+  };
+
+  const scheduleMidnightRoll = () => {
+    if (dnpMidnightTimer) {
+      clearTimeout(dnpMidnightTimer);
+      dnpMidnightTimer = 0;
+    }
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setDate(midnight.getDate() + 1);
+    midnight.setHours(0, 0, 0, 0);
+    const msUntilMidnight = midnight.getTime() - now.getTime() + 500;
+    dnpMidnightTimer = window.setTimeout(async () => {
+      dnpMidnightTimer = 0;
+      dnpDismissedForDate = null;
+      await checkAndPinDnp();
+      scheduleMidnightRoll();
+    }, msUntilMidnight);
+  };
+
+  const handleDateRollCheck = async () => {
+    if (!isDnpPinEnabled()) return;
+    const uid = getTodayDnpUid();
+    if (dnpTrackedUid && dnpTrackedUid !== uid) {
+      dnpDismissedForDate = null;
+      await ensureDnpPinned();
+      scheduleMidnightRoll();
+      return;
+    }
+    await checkAndPinDnp();
+  };
+
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === "visible") handleDateRollCheck();
+  };
+
+  const handleWindowFocus = () => handleDateRollCheck();
+
+  const startDnpPin = () => {
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleWindowFocus);
+    unloads.add(() => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleWindowFocus);
+    });
+    ensureDnpPinned();
+    scheduleMidnightRoll();
+  };
+
+  const stopDnpPin = () => {
+    if (dnpMidnightTimer) {
+      clearTimeout(dnpMidnightTimer);
+      dnpMidnightTimer = 0;
+    }
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+    window.removeEventListener("focus", handleWindowFocus);
+    dnpTrackedUid = null;
+    dnpDismissedForDate = null;
+  };
+
+  if (isDnpPinEnabled()) {
+    setTimeout(() => startDnpPin(), 1500);
+  }
+
+  // --- End Pin Today's Daily Note ---
+
   const unload = () => {
     if (persistSidebarTimer) {
       clearTimeout(persistSidebarTimer);
@@ -715,6 +861,10 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
     if (restoreSidebarTimer) {
       clearTimeout(restoreSidebarTimer);
       restoreSidebarTimer = 0;
+    }
+    if (dnpMidnightTimer) {
+      clearTimeout(dnpMidnightTimer);
+      dnpMidnightTimer = 0;
     }
     unloads.forEach((u) => u());
     const rightSidebar = document.getElementById("right-sidebar");
@@ -732,6 +882,8 @@ const initializeRoamJSSidebarFeatures = (extensionAPI) => {
 
   unload.refreshExpandCollapseIcon = refreshExpandCollapseIcon;
   unload.refreshGoToPageLinks = refreshGoToPageLinks;
+  unload.startDnpPin = startDnpPin;
+  unload.stopDnpPin = stopDnpPin;
   unload.forcePersistSidebarState = () =>
     writePersistedSidebarState({ withWindows: true });
   return unload;

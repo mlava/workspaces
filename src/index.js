@@ -81,6 +81,21 @@ export default {
                     action: { type: "switch" },
                 },
                 {
+                    id: "ws-pin-dnp",
+                    name: "Pin Today's Daily Note",
+                    description: "Pin today's Daily Note Page to the top of the right sidebar. Automatically swaps to the new day at midnight.",
+                    action: {
+                        type: "switch",
+                        onChange: (evt) => {
+                            if (evt?.target?.checked) {
+                                roamJSSidebarFeatures?.startDnpPin?.();
+                            } else {
+                                roamJSSidebarFeatures?.stopDnpPin?.();
+                            }
+                        },
+                    },
+                },
+                {
                     id: "ws-go-to-page",
                     name: "Go to Page Links",
                     description: "Whether or not to show go to page links from Page sidebar windows",
@@ -1592,6 +1607,7 @@ async function buildToolDescriptor() {
             {
                 name: "ws_open",
                 description: "Open a saved workspace by name. Restores the layout including left/right sidebar state, main content, sidebar windows, custom CSS, zen mode, and extended focus mode.",
+                readOnly: false,
                 parameters: {
                     type: "object",
                     properties: {
@@ -1611,6 +1627,7 @@ async function buildToolDescriptor() {
             {
                 name: "ws_create_from_current_state",
                 description: "Create a new workspace from the current Roam layout state.",
+                readOnly: false,
                 parameters: {
                     type: "object",
                     properties: {
