@@ -1,6 +1,7 @@
 Create workspaces that you can automatically open with the click of a button.
 
 **New:**
+- **Pin Today's Daily Note** — Automatically pins the current day's Daily Note Page to the top of the right sidebar (red pin). At midnight—or whenever you return to Roam after the date has changed—the old day's DNP is swapped out for the new one. Enable via the "Pin Today's Daily Note" toggle in settings. If you manually close the pinned DNP, it won't reappear until the next day. The pinned DNP survives workspace switches.
 - Updated to fix bugs with go-to-page links and expand/collapse all toggle and icon placement in right sidebar.
 - Support Extended Focus Mode extension! Allows the workspace definition to include whether Focus Mode is on or off, and automatically create the setting when opening a workspace.
 - Support Roam Research Zen mode! Allows the workspace definition to include whether Zen mode is on or off, and automatically create the setting when opening a workspace.
