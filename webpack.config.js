@@ -10,5 +10,5 @@ module.exports = {
     experiments: {
         outputModule: true,
     },
-    mode: "development",
+    mode: "production",
 };
