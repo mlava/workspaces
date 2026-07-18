@@ -20,6 +20,7 @@ var wsName = [];
 
 export default {
     onload: ({ extensionAPI }) => {
+        let cleanedUp = false; // set by cleanup; guards against arming timers after unload
         const config = {
             tabTitle: "Workspaces",
             settings: [
@@ -343,6 +344,7 @@ export default {
                     console.warn("Workspaces: immediate autosave failed", e);
                 }
             }
+            if (cleanedUp) return; // unloaded while the immediate save was in flight — don't arm a timer the cleanup can no longer reach
             try { if (checkInterval > 0) clearInterval(checkInterval) } catch (e) { }
             checkInterval = setInterval(async () => {
                 try {
@@ -651,7 +653,6 @@ export default {
         if (setting === true || setting === "true") {
             roamJSSidebarFeatures?.refreshGoToPageLinks?.();
         }
-        let cleanedUp = false;
         const cleanup = () => {
             if (cleanedUp) return; // Roam may invoke both the returned cleanup and onunload
             cleanedUp = true;
