@@ -1,6 +1,12 @@
 import iziToast from "izitoast";
 import initializeRoamJSSidebarFeatures from "./sidebar";
+
+async function updateBlockString(uid, string) {
+    return window.roamAlphaAPI.updateBlock({ "block": { "uid": uid, "string": string } });
+}
+
 var pullBlock = undefined;
+var teardown = undefined;
 var auto = false;
 var key;
 let observer = undefined;
@@ -274,13 +280,13 @@ export default {
         }
         if (extensionAPI.settings.get("ws-auto") == true) { // onload
             auto = true;
-            autoSave();
+            autoSave(false); // arm the interval only — a graph write must never be a load side-effect (Depot updates reload extensions in place)
         }
 
         async function setAuto(evt) { // onchange
             if (evt.target.checked) {
                 auto = true;
-                autoSave();
+                autoSave(true);
             } else {
                 auto = false;
                 if (checkInterval > 0) clearInterval(checkInterval);
@@ -305,7 +311,7 @@ export default {
             }
         }
 
-        async function autoSave() {
+        async function autoSave(immediate) {
             if (extensionAPI.settings.get("ws-auto-time")) {
                 const regex = /^[0-9]{1,2}$/m;
                 if (regex.test(extensionAPI.settings.get("ws-auto-time"))) {
@@ -330,10 +336,20 @@ export default {
                 autoLabel = "Autosave";
             }
 
-            await createWorkspace(auto, autoLabel, autoMenu);
+            if (immediate) {
+                try {
+                    await createWorkspace(auto, autoLabel, autoMenu);
+                } catch (e) {
+                    console.warn("Workspaces: immediate autosave failed", e);
+                }
+            }
             try { if (checkInterval > 0) clearInterval(checkInterval) } catch (e) { }
             checkInterval = setInterval(async () => {
-                await createWorkspace(auto, autoLabel/*, autoMenu*/)
+                try {
+                    await createWorkspace(auto, autoLabel/*, autoMenu*/)
+                } catch (e) {
+                    console.warn("Workspaces: autosave tick failed", e);
+                }
             }, checkEveryMinutes * 60000);
         }
 
@@ -343,7 +359,7 @@ export default {
                 if (page[0][0].hasOwnProperty("children")) {
                     for (var i = 0; i < page[0][0].children.length; i++) {
                         if (page[0][0].children[i].string == "Workspace Definitions:") {
-                            var pullBlock = page[0][0].children[i].uid;
+                            pullBlock = page[0][0].children[i].uid; // module-level — cleanup removes the watch by this uid
                         }
                     }
                 }
@@ -635,7 +651,10 @@ export default {
         if (setting === true || setting === "true") {
             roamJSSidebarFeatures?.refreshGoToPageLinks?.();
         }
-        return () => {
+        let cleanedUp = false;
+        const cleanup = () => {
+            if (cleanedUp) return; // Roam may invoke both the returned cleanup and onunload
+            cleanedUp = true;
             roamJSSidebarFeatures?.();
             if (document.getElementById("workspaces")) {
                 document.getElementById("workspaces").remove();
@@ -646,7 +665,7 @@ export default {
                 "[:block/children :block/uid :block/string {:block/children ...}]",
                 `[:block/uid "${pullBlock}"]`,
                 pullFunction);
-            observer.disconnect();
+            observer?.disconnect();
             if (window.RoamExtensionTools) delete window.RoamExtensionTools['workspaces'];
             clearWorkspaceCSS();
             if (document.getElementById("workspaces-css-fix-roam-studio")) {
@@ -654,7 +673,13 @@ export default {
                 var cssStyles = document.getElementById("workspaces-css-fix-roam-studio");
                 head.removeChild(cssStyles);
             }
-        }
+        };
+        teardown = cleanup;
+        return cleanup;
+    },
+    onunload: () => {
+        try { teardown?.(); } catch (e) { }
+        teardown = undefined;
     }
 }
 
@@ -720,26 +745,42 @@ async function createWorkspace(autosaved, autoLabel, update, forcedName) {
 
     var thisPage = await window.roamAlphaAPI.ui.mainWindow.getOpenPageOrBlockUid();
     if (thisPage == undefined || thisPage == null) {
-        var uri = window.location.href;
-        const regex = /^https:\/\/roamresearch\.com\/.+\/(app|offline)\/\w+$/; //today's DNP
-        if (uri.match(regex)) { // this is Daily Notes for today
+        // getOpenPageOrBlockUid returns null on the daily notes log view; the URL is not a
+        // reliable signal (desktop app, graph names with hyphens), so ask Roam for the view type
+        var openView = undefined;
+        try { openView = await window.roamAlphaAPI.ui.mainWindow.getOpenView?.(); } catch (e) { }
+        if (openView) {
+            if (openView.type == "log") thisPage = "DNP";
+        } else if (document.querySelector(".roam-log-container .roam-log-page")) {
             thisPage = "DNP";
         }
+    }
+    if (thisPage == undefined || thisPage == null) { // graph view, search, etc. — nothing to save
+        if (autosaved) {
+            console.info("Workspaces: autosave skipped — no open page or daily note log to save");
+            return;
+        }
+        iziToast.show({ message: "Workspaces: could not determine the current page. Open a page and try again.", timeout: 4000 });
+        return;
     }
 
     var pageName = undefined;
     var pageFilters = undefined;
     var pageRefFilters = undefined;
     if (thisPage != "DNP") {
-        pageName = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${thisPage}"] [?b :node/title ?title]]`);
-        var pageFiltersTemp = await window.roamAlphaAPI.ui.filters.getPageFilters({ "page": { "uid": thisPage } });
-        if (pageFiltersTemp.includes.length > 0 || pageFiltersTemp.removes.length > 0) {
-            pageFilters = pageFiltersTemp;
-        }
-        var pageRefFiltersTemp = await window.roamAlphaAPI.ui.filters.getPageLinkedRefsFilters({ "page": { "uid": thisPage } });
-        if (pageRefFiltersTemp.includes.length > 0 || pageRefFiltersTemp.removes.length > 0) {
-            pageRefFilters = pageRefFiltersTemp;
-        }
+        pageName = (await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${thisPage}"] [?b :node/title ?title]]`))?.[0]?.[0];
+        try {
+            var pageFiltersTemp = await window.roamAlphaAPI.ui.filters.getPageFilters({ "page": { "uid": thisPage } });
+            if (pageFiltersTemp.includes.length > 0 || pageFiltersTemp.removes.length > 0) {
+                pageFilters = pageFiltersTemp;
+            }
+        } catch (e) { } // thisPage may be a zoomed block uid, which has no page-level filters
+        try {
+            var pageRefFiltersTemp = await window.roamAlphaAPI.ui.filters.getPageLinkedRefsFilters({ "page": { "uid": thisPage } });
+            if (pageRefFiltersTemp.includes.length > 0 || pageRefFiltersTemp.removes.length > 0) {
+                pageRefFilters = pageRefFiltersTemp;
+            }
+        } catch (e) { }
     }
 
     var RSWList = [];
@@ -900,7 +941,7 @@ async function createWorkspace(autosaved, autoLabel, update, forcedName) {
         if (RSWList.length > 0) {
             for (var i = 0; i < RSWList.length; i++) {
                 if (RSWList[i].type == "outline") {
-                    var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`);
+                    var pageName1 = (await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`))?.[0]?.[0] || "";
                     let RSWFdef = await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
                     await createBlock(RSWList[i].filters, RSWFdef, 1);
                 } else {
@@ -998,7 +1039,7 @@ async function createWorkspace(autosaved, autoLabel, update, forcedName) {
             if (RSWList.length > 0) {
                 for (var i = 0; i < RSWList.length; i++) {
                     if (RSWList[i].type == "outline") {
-                        var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`);
+                        var pageName1 = (await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`))?.[0]?.[0] || "";
                         let RSWFdef = await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
                         await createBlock(RSWList[i].filters, RSWFdef, 1);
                     } else {
@@ -1035,23 +1076,17 @@ async function createWorkspace(autosaved, autoLabel, update, forcedName) {
             await createBlock(rightSidebarState, ws_4v, 1);
             let ws_5 = "Main Content:";
             let ws_5v = await createBlock(ws_5, secHeaderUID, 2);
-            if (pageName != undefined && pageName.length > 0) {
-                await createBlock("[[" + pageName + "]]", ws_5v, 1);
-                if (pageFilters != undefined) {
-                    await createBlock(JSON.stringify(pageFilters), ws_5v, 2);
-                }
-                if (pageRefFilters != undefined) {
-                    await createBlock("Ref filters: " + JSON.stringify(pageRefFilters), ws_5v, 3);
-                }
-            } else {
-                await createBlock(thisPage, ws_5v, 1);
-            }
+            // same flat layout the update path maintains, so the next tick finds nothing to change
+            var mcTarget = (pageName != undefined && pageName.length > 0) ? "[[" + pageName + "]]" : String(thisPage);
+            await createBlock(mcTarget, ws_5v, 1);
+            await createBlock(JSON.stringify(pageFilters == undefined ? { "includes": [], "removes": [] } : pageFilters), ws_5v, 2);
+            await createBlock("Ref filters: " + JSON.stringify(pageRefFilters == undefined ? { "includes": [], "removes": [] } : pageRefFilters), ws_5v, 3);
             let ws_6 = "Right Sidebar Content:";
             let ws_6v = await createBlock(ws_6, secHeaderUID, 3);
             if (RSWList.length > 0) {
                 for (var i = 0; i < RSWList.length; i++) {
                     if (RSWList[i].type == "outline") {
-                        var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`);
+                        var pageName1 = (await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[i].uid}"] [?b :node/title ?title]]`))?.[0]?.[0] || "";
                         let RSWFdef = await createBlock("[[" + pageName1 + "]]," + RSWList[i].type + "," + RSWList[i].collapsed + "", ws_6v, RSWList[i].order);
                         await createBlock(RSWList[i].filters, RSWFdef, 1);
                     } else {
@@ -1079,12 +1114,7 @@ async function createWorkspace(autosaved, autoLabel, update, forcedName) {
                             if (definitions.children[i].children[j].string.startsWith("Left Sidebar:")) {
                                 if (definitions.children[i].children[j].hasOwnProperty("children")) {
                                     if (definitions.children[i].children[j].children[0].string != leftSidebarState) { // only update if different
-                                        window.roamAlphaAPI.updateBlock({
-                                            "block": {
-                                                "uid": definitions.children[i].children[j].children[0].uid,
-                                                "string": leftSidebarState
-                                            }
-                                        });
+                                        updateBlockString(definitions.children[i].children[j].children[0].uid, leftSidebarState);
                                         console.info("Workspaces - autoupdated left sidebar state");
                                     }
                                 }
@@ -1093,96 +1123,37 @@ async function createWorkspace(autosaved, autoLabel, update, forcedName) {
                             if (definitions.children[i].children[j].string.startsWith("Right Sidebar:")) {
                                 if (definitions.children[i].children[j].hasOwnProperty("children")) {
                                     if (definitions.children[i].children[j].children[0].string != rightSidebarState) { // only update if different
-                                        window.roamAlphaAPI.updateBlock({
-                                            "block": {
-                                                "uid": definitions.children[i].children[j].children[0].uid,
-                                                "string": rightSidebarState
-                                            }
-                                        });
+                                        updateBlockString(definitions.children[i].children[j].children[0].uid, rightSidebarState);
                                         console.info("Workspaces - autoupdated right sidebar state");
                                     }
                                 }
                             }
                             // check and update if needed - main content
                             if (definitions.children[i].children[j].string.startsWith("Main Content:")) {
-                                var jsonPageFilters;
-                                if (pageFilters == undefined) {
-                                    jsonPageFilters = JSON.stringify({ "includes": [], "removes": [] });
-                                } else {
-                                    jsonPageFilters = JSON.stringify(pageFilters);
+                                var jsonPageFilters = JSON.stringify(pageFilters == undefined ? { "includes": [], "removes": [] } : pageFilters);
+                                var jsonPageRefFilters = JSON.stringify(pageRefFilters == undefined ? { "includes": [], "removes": [] } : pageRefFilters);
+                                var mcUid = definitions.children[i].children[j].uid;
+                                var mcTarget = (pageName != undefined && pageName.length > 0) ? "[[" + pageName + "]]" : String(thisPage);
+                                // maintain the flat sibling layout gotoWorkspace reads: page link, filters, ref filters
+                                var mcChildren = (definitions.children[i].children[j].children || []).slice().sort(function (a, b) { return a.order - b.order; });
+                                var mcRefFilters = mcChildren.find(function (c) { return String(c.string).startsWith("Ref filters:"); });
+                                var mcFilters = mcChildren.find(function (c) { return String(c.string).trim().startsWith('{"includes"'); });
+                                var mcMain = mcChildren.find(function (c) { return c !== mcRefFilters && c !== mcFilters; });
+                                if (mcMain == undefined) {
+                                    await createBlock(mcTarget, mcUid, 1);
+                                } else if (mcMain.string != mcTarget) {
+                                    updateBlockString(mcMain.uid, mcTarget);
+                                    console.info("Workspaces - autoupdated main content state");
                                 }
-                                var jsonPageRefFilters;
-                                if (pageRefFilters == undefined) {
-                                    jsonPageRefFilters = JSON.stringify({ "includes": [], "removes": [] });
-                                } else {
-                                    jsonPageRefFilters = JSON.stringify(pageRefFilters);
+                                if (mcFilters == undefined) {
+                                    await createBlock(jsonPageFilters, mcUid, 2);
+                                } else if (mcFilters.string != jsonPageFilters) {
+                                    updateBlockString(mcFilters.uid, jsonPageFilters);
                                 }
-                                if (definitions.children[i].children[j].hasOwnProperty("children")) {
-                                    if (pageName != undefined && pageName.length > 0 && definitions.children[i].children[j].children[0].string != "[[" + pageName + "]]") { // only update if different
-                                        window.roamAlphaAPI.updateBlock({
-                                            "block": {
-                                                "uid": definitions.children[i].children[j].children[0].uid,
-                                                "string": "[[" + pageName + "]]"
-                                            }
-                                        });
-                                        console.info("Workspaces - autoupdated main content state");
-                                    } else if (definitions.children[i].children[j].children[0].string != "[[" + pageName + "]]") {
-                                        window.roamAlphaAPI.updateBlock({
-                                            "block": {
-                                                "uid": definitions.children[i].children[j].children[0].uid,
-                                                "string": pageName
-                                            }
-                                        });
-                                    }
-                                    if (definitions.children[i].children[j].children[0].hasOwnProperty("children")) {
-                                        if (definitions.children[i].children[j].children[0].children.length < 2) {
-                                            if (!definitions.children[i].children[j].children[0].children[0].string.startsWith('Ref filters:')) {
-                                                window.roamAlphaAPI.updateBlock({
-                                                    "block": {
-                                                        "uid": definitions.children[i].children[j].children[0].children[0].uid,
-                                                        "string": jsonPageFilters
-                                                    }
-                                                });
-                                                await createBlock("Ref filters: " + jsonPageRefFilters, definitions.children[i].children[j].children[0].uid, 1);
-                                            } else {
-                                                window.roamAlphaAPI.updateBlock({
-                                                    "block": {
-                                                        "uid": definitions.children[i].children[j].children[0].children[0].uid,
-                                                        "string": "Ref filters: " + jsonPageRefFilters
-                                                    }
-                                                });
-                                                await createBlock(jsonPageFilters, definitions.children[i].children[j].children[0].uid, 0);
-                                            }
-                                        } else {
-                                            for (var l = 0; l < definitions.children[i].children[j].children[0].children.length; l++) {
-                                                if (!definitions.children[i].children[j].children[0].children[l].string.startsWith('Ref filters:')) {
-                                                    window.roamAlphaAPI.updateBlock({
-                                                        "block": {
-                                                            "uid": definitions.children[i].children[j].children[0].children[l].uid,
-                                                            "string": jsonPageFilters
-                                                        }
-                                                    });
-                                                } else {
-                                                    window.roamAlphaAPI.updateBlock({
-                                                        "block": {
-                                                            "uid": definitions.children[i].children[j].children[0].children[l].uid,
-                                                            "string": "Ref filters: " + jsonPageRefFilters
-                                                        }
-                                                    });
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        await createBlock(jsonPageFilters, definitions.children[i].children[j].children[0].uid, 0);
-                                        await createBlock("Ref filters: " + jsonPageRefFilters, definitions.children[i].children[j].children[0].uid, 1);
-                                    }
-                                } else {
-                                    if (pageName != undefined && pageName.length > 0) {
-                                        let newPage = await createBlock("[[" + pageName + "]]", definitions.children[i].children[j].uid, 0);
-
-                                        await createBlock(jsonPageFilters, newPage, 0);
-                                        await createBlock("Ref filters: " + jsonPageRefFilters, newPage, 1);
-                                    }
+                                if (mcRefFilters == undefined) {
+                                    await createBlock("Ref filters: " + jsonPageRefFilters, mcUid, 3);
+                                } else if (mcRefFilters.string != "Ref filters: " + jsonPageRefFilters) {
+                                    updateBlockString(mcRefFilters.uid, "Ref filters: " + jsonPageRefFilters);
                                 }
                             }
                             // check and update if needed - right sidebar content
@@ -1210,28 +1181,18 @@ async function createWorkspace(autosaved, autoLabel, update, forcedName) {
                                     for (var k = 0; k < RSWList.length; k++) {
                                         var RSWFdef;
                                         if (RSWList[k].type == "outline") {
-                                            var pageName1 = await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[k].uid}"] [?b :node/title ?title]]`);
+                                            var pageName1 = (await window.roamAlphaAPI.q(`[:find ?title :where [?b :block/uid "${RSWList[k].uid}"] [?b :node/title ?title]]`))?.[0]?.[0] || "";
                                             RSWFdef = "[[" + pageName1 + "]]," + RSWList[k].type + "," + RSWList[k].collapsed + "";
                                         } else {
                                             RSWFdef = "((" + RSWList[k].uid + "))," + RSWList[k].type + "," + RSWList[k].collapsed + "";
                                         }
                                         if (k < leng) {
                                             if (RSWFdef != definitions.children[i].children[j].children[k].string) {
-                                                await window.roamAlphaAPI.updateBlock({
-                                                    "block": {
-                                                        "uid": definitions.children[i].children[j].children[k].uid,
-                                                        "string": RSWFdef
-                                                    }
-                                                })
+                                                await updateBlockString(definitions.children[i].children[j].children[k].uid, RSWFdef);
                                             }
                                             if (definitions.children[i].children[j].children[k].hasOwnProperty("children")) {
                                                 if (definitions.children[i].children[j].children[k].children[0].string != RSWList[k].filters) {
-                                                    await window.roamAlphaAPI.updateBlock({
-                                                        "block": {
-                                                            "uid": definitions.children[i].children[j].children[k].children[0].uid,
-                                                            "string": RSWList[k].filters
-                                                        }
-                                                    })
+                                                    await updateBlockString(definitions.children[i].children[j].children[k].children[0].uid, RSWList[k].filters);
                                                 }
                                             } else {
                                                 await createBlock(RSWList[k].filters, definitions.children[i].children[j].children[k].uid, 0);
@@ -1254,12 +1215,7 @@ async function createWorkspace(autosaved, autoLabel, update, forcedName) {
                                 zenFound = true;
                                 if (definitions.children[i].children[j].hasOwnProperty("children")) {
                                     if (definitions.children[i].children[j].children[0].string != zenModeState) { // only update if different
-                                        await window.roamAlphaAPI.updateBlock({
-                                            "block": {
-                                                "uid": definitions.children[i].children[j].children[0].uid,
-                                                "string": zenModeState
-                                            }
-                                        });
+                                        await updateBlockString(definitions.children[i].children[j].children[0].uid, zenModeState);
                                     }
                                 } else {
                                     await createBlock(zenModeState, definitions.children[i].children[j].uid, 0);
@@ -1269,12 +1225,7 @@ async function createWorkspace(autosaved, autoLabel, update, forcedName) {
                                 efmFound = true;
                                 if (definitions.children[i].children[j].hasOwnProperty("children")) {
                                     if (definitions.children[i].children[j].children[0].string != efmModeState) { // only update if different
-                                        await window.roamAlphaAPI.updateBlock({
-                                            "block": {
-                                                "uid": definitions.children[i].children[j].children[0].uid,
-                                                "string": efmModeState
-                                            }
-                                        });
+                                        await updateBlockString(definitions.children[i].children[j].children[0].uid, efmModeState);
                                     }
                                 } else {
                                     await createBlock(efmModeState, definitions.children[i].children[j].uid, 0);
